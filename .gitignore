@@ -1,0 +1,10 @@
+docs
+.vscode/
+
+# Local environment files can contain credentials. Never commit them.
+**/.env
+**/.env.*
+
+# Database dumps / backups (contain real data). Never commit them.
+backend/data/
+*.sql

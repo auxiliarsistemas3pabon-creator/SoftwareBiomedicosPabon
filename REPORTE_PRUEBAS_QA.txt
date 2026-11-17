@@ -1,0 +1,1517 @@
+====================================================================================================
+REPORTE DE PRUEBAS UNITARIAS (QA) - SOFTWARE BIOMEDICOS
+====================================================================================================
+Fecha de ejecucion : 2026-11-12
+Alcance            : backend (Django/DRF) y frontend (React/Vite/TypeScript)
+
+1. RESUMEN EJECUTIVO
+----------------------------------------------------------------------------------------------------
+  Backend  : 686 pruebas ejecutadas, 0 fallidas, 4 omitidas.   Cobertura de lineas: 86 % (4851 sentencias, 694 sin cubrir)
+  Frontend : 382 pruebas; ultima corrida completa 381 OK y 1 fallo por carga (pasa aislada, ver H-09).   Cobertura de lineas: ~51 % (corrida anterior; no recalculada)
+
+  IMPORTANTE - ESTADO REAL DEL OBJETIVO 'cubrir todas las lineas':
+  * NO se alcanzo el 100 % de lineas. Backend quedo en 86 % (antes 82 %) y frontend en ~51 % (antes 2.6 %).
+  * Lo cubierto tiene pruebas con aserciones reales (no solo smoke). Lo NO cubierto esta enumerado en la seccion 6.
+  * Resultado de la ultima corrida completa del backend: 574 pasaron y 2 fallaron por TIMEOUT de WebSocket
+    (realtime/tests/test_notifications.py) en una corrida anterior debido a que la maquina estaba saturada (Docker con muchos contenedores).
+    Esas dos pruebas, ejecutadas  , pasan 9/9 (dos veces consecutivas). Es una prueba sensible a la carga (flaky).
+
+2. ENTORNO Y METODO
+----------------------------------------------------------------------------------------------------
+  Backend : Python 3.12, Django 5.2, pytest 9 + pytest-django + pytest-cov + factory-boy.
+            BD: PostgreSQL 16 desechable en Docker (contenedor 'qa_pg', puerto 55432). SQLite NO sirve: hay migraciones con SQL
+            exclusivo de Postgres ('CASCADE'). Settings de prueba: backend/config/settings/test.py (Celery eager, email locmem).
+  Frontend: Vitest 4 + jsdom + Testing Library (react / user-event / jest-dom), cobertura v8 (@vitest/coverage-v8).
+            Servicios HTTP simulados con vi.mock; contextos de autenticacion simulados donde corresponde.
+  Comandos:
+     backend : DJANGO_SETTINGS_MODULE=config.settings.test POSTGRES_HOST=127.0.0.1 venv/Scripts/python -m pytest --cov
+     frontend: pnpm test --coverage        (usar pnpm; 'npx vitest' falla por diferencia d:/ vs D:/ en Windows)
+
+3. CAMBIOS REALIZADOS EN EL PROYECTO PARA PODER PROBAR
+----------------------------------------------------------------------------------------------------
+  - backend/config/settings/test.py            (nuevo)  settings de prueba con Postgres local
+  - backend/.coveragerc                        (nuevo)  excluye migraciones, tests y venv de la cobertura
+  - backend/users/tests/test_coverage_gaps.py, test_common_gaps.py, equipment/tests/test_coverage_gaps.py,
+    backend/workorders/gaps_tests.py, backend/workorders/conftest.py   (nuevos)
+  - frontend/package.json                      devDependency @vitest/coverage-v8@4.1.11
+  - frontend/vite.config.ts                    bloque coverage + testTimeout 30s + maxWorkers 2 (equipos con poca RAM)
+  - frontend/src/test/setup.ts                 asyncUtilTimeout 4000 ms
+  - frontend/src/test/helpers.tsx              (nuevo) fabricas/render auxiliares
+  - Pruebas nuevas del frontend: services, utils, lib (api/interceptores, websocket, media, users), context, components/ui,
+    components/layout, pages publicas + perfil, usuarios, fallas, mantenimientos.
+  Nota: se reinstalo frontend/node_modules (apuntaba a una ruta antigua 'FrontEquiposBiometricos'). No se hicieron commits.
+
+4. COBERTURA FRONTEND (por archivo)
+----------------------------------------------------------------------------------------------------
+  File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+  -------------------|---------|----------|---------|---------|-------------------
+  All files          |   51.28 |    42.02 |   44.93 |   50.94 |                   
+   src               |       0 |        0 |       0 |       0 |                   
+    App.tsx          |       0 |        0 |       0 |       0 | 29                
+   src/components    |   84.61 |      100 |   83.33 |      90 |                   
+    ...rBoundary.tsx |   84.61 |      100 |   83.33 |      90 | 52                
+   src/components/ui |   97.44 |     98.1 |   96.05 |   99.49 |                   
+    Combobox.tsx     |    97.7 |    98.07 |   95.23 |     100 | 48                
+    IconHint.tsx     |      90 |       75 |     100 |     100 | 10                
+    Modal.tsx        |     100 |    95.45 |     100 |     100 | 51                
+    ...ianSelect.tsx |   97.01 |      100 |   91.66 |   98.27 | 176               
+    ...Container.tsx |   83.33 |       75 |     100 |     100 | 15                
+   src/context       |   98.11 |    97.56 |     100 |   98.92 |                   
+    ...onContext.tsx |   97.61 |      100 |     100 |   97.36 | 70                
+    ThemeContext.tsx |      96 |    91.66 |     100 |     100 | 15                
+   src/lib           |   99.58 |    93.95 |     100 |     100 |                   
+    api.ts           |    99.1 |    90.32 |     100 |     100 | ...80,190,214-217 
+    media.ts         |     100 |    93.75 |     100 |     100 | 17                
+    websocket.ts     |     100 |    96.96 |     100 |     100 | 28                
+   src/pages/admin   |   97.67 |       96 |    90.9 |   97.61 |                   
+    PerfilPage.tsx   |   97.61 |    95.65 |      90 |   97.56 | 189               
+   ...dmin/dashboard |       0 |        0 |       0 |       0 |                   
+    ...nOverview.tsx |       0 |        0 |       0 |       0 | 38-396            
+    ...Dashboard.tsx |       0 |        0 |       0 |       0 | 29-317            
+    ...boardPage.tsx |       0 |        0 |       0 |       0 | 14-62             
+    ...dSections.tsx |       0 |        0 |       0 |       0 | 13-175            
+    ...Dashboard.tsx |       0 |        0 |       0 |       0 | 29-406            
+    ...ewWidgets.tsx |       0 |        0 |       0 |       0 | 44-288            
+   ...dmin/equipment |       0 |        0 |       0 |       0 |                   
+    ...onSection.tsx |       0 |      100 |       0 |       0 | 5-64              
+    ...onSection.tsx |       0 |      100 |       0 |       0 | 5-40              
+    ...onSection.tsx |       0 |        0 |       0 |       0 | 18-140            
+    ...alSection.tsx |       0 |      100 |       0 |       0 | 5-26              
+    ...ntFilters.tsx |       0 |        0 |       0 |       0 | 20-67             
+    ...FormModal.tsx |       0 |        0 |       0 |       0 | 35                
+    ...entHeader.tsx |       0 |        0 |       0 |       0 | 4                 
+    ...onSection.tsx |       0 |      100 |       0 |       0 | 5-48              
+    ...feSection.tsx |       0 |      100 |       0 |       0 | 8-34              
+    ...onSection.tsx |       0 |        0 |       0 |       0 | 10-109            
+    ...ceSection.tsx |       0 |      100 |       0 |       0 | 5-53              
+    ...nsSection.tsx |       0 |      100 |       0 |       0 | 4-14              
+    ...agination.tsx |       0 |        0 |       0 |       0 | 14-39             
+    ...rySection.tsx |       0 |      100 |       0 |       0 | 5-26              
+    EquipmentRow.tsx |       0 |        0 |       0 |       0 | 24-114            
+    ...mentTable.tsx |       0 |        0 |       0 |       0 | 19-48             
+    ...tySection.tsx |       0 |      100 |       0 |       0 | 5-29              
+    ...tallePage.tsx |       0 |        0 |       0 |       0 | 14-48             
+    EquipoFicha.tsx  |       0 |        0 |       0 |       0 | 47-198            
+    EquiposPage.tsx  |       0 |        0 |       0 |       0 | 29-498            
+    ...tasQrPage.tsx |       0 |        0 |       0 |       0 | 24-488            
+    FichaHeader.tsx  |       0 |        0 |       0 |       0 | 33-190            
+    ...istoryTab.tsx |       0 |        0 |       0 |       0 | 11-31             
+    FichaInfoTab.tsx |       0 |        0 |       0 |       0 | 19-77             
+    ...eduledTab.tsx |       0 |        0 |       0 |       0 | 13-37             
+    FichaTabs.tsx    |       0 |        0 |       0 |       0 | 10-46             
+    LetterFilter.tsx |       0 |        0 |       0 |       0 | 3-17              
+    SedeQrModal.tsx  |       0 |        0 |       0 |       0 | 11-77             
+    SedesPage.tsx    |       0 |        0 |       0 |       0 | 25-453            
+    StatusSelect.tsx |       0 |        0 |       0 |       0 | 5-10              
+   ...ipment/catalog |       0 |        0 |       0 |       0 |                   
+    ...FormModal.tsx |       0 |        0 |       0 |       0 | 15-28             
+    ...iveSelect.tsx |       0 |        0 |       0 |       0 | 14-18             
+    ...randsCard.tsx |       0 |        0 |       0 |       0 | 34-179            
+    ...odelsCard.tsx |       0 |        0 |       0 |       0 | 37-191            
+    CatalogPager.tsx |       0 |        0 |       0 |       0 | 19-22             
+    ...elosPanel.tsx |       0 |        0 |       0 |       0 | 32-484            
+    ...FormModal.tsx |       0 |        0 |       0 |       0 | 18-53             
+   ...ent/workorders |       0 |        0 |       0 |       0 |                   
+    ...anceModal.tsx |       0 |        0 |       0 |       0 | 26-92             
+    ...abajoPage.tsx |       0 |        0 |       0 |       0 | 70-175            
+    ...etailView.tsx |       0 |        0 |       0 |       0 | 27-172            
+    ...erFilters.tsx |       0 |        0 |       0 |       0 | 16-53             
+    ...FormModal.tsx |       0 |        0 |       0 |       0 | 21-110            
+    ...derHeader.tsx |       0 |        0 |       0 |       0 | 4                 
+    ...OrderInfo.tsx |       0 |        0 |       0 |       0 | 5                 
+    ...agination.tsx |       0 |        0 |       0 |       0 | 14-39             
+    WorkOrderRow.tsx |       0 |        0 |       0 |       0 | 9-136             
+    ...rSections.tsx |       0 |        0 |       0 |       0 | 12-281            
+    ...rderTable.tsx |       0 |        0 |       0 |       0 | 17-47             
+    ...nesTrabajo.ts |       0 |        0 |       0 |       0 | 20-340            
+   ...admin/failures |      97 |    97.08 |   94.73 |    98.1 |                   
+    ...reFilters.tsx |     100 |       50 |     100 |     100 | 27                
+    ...agination.tsx |   66.66 |      100 |   66.66 |   66.66 | 27                
+    FallasPage.tsx   |   97.81 |    95.23 |   96.77 |   99.21 | 94                
+    ...lureModal.tsx |      75 |      100 |      75 |      75 | 16                
+   ...in/maintenance |    97.2 |    90.12 |   95.38 |   97.97 |                   
+    ...nceFilter.tsx |     100 |       50 |     100 |     100 | 19-28             
+    ...FormModal.tsx |     100 |    93.33 |     100 |     100 | 70,108,176        
+    ...agination.tsx |   66.66 |      100 |   66.66 |   66.66 | 27                
+    ...anceTable.tsx |     100 |       75 |     100 |     100 | 15-24             
+    ...entosPage.tsx |      80 |      100 |   66.66 |      80 | 133               
+    ...enimientos.ts |    97.8 |    88.75 |   97.22 |   98.78 | 84,306            
+   ...min/scheduling |       0 |        0 |       0 |       0 |                   
+    ...entosPage.tsx |       0 |        0 |       0 |       0 | 34-433            
+    ...tailModal.tsx |       0 |        0 |       0 |       0 | 27-202            
+    ...ngFilters.tsx |       0 |        0 |       0 |       0 | 17-52             
+    ...FormModal.tsx |       0 |        0 |       0 |       0 | 27-155            
+    ...ingHeader.tsx |       0 |        0 |       0 |       0 | 3-6               
+    ...agination.tsx |       0 |        0 |       0 |       0 | 14-39             
+    ...dulingRow.tsx |       0 |        0 |       0 |       0 | 40-190            
+    ...lingTable.tsx |       0 |        0 |       0 |       0 | 26-81             
+    ...ervention.tsx |       0 |        0 |       0 |       0 | 7-60              
+   ...es/admin/users |   97.79 |     91.3 |   98.38 |    99.4 |                   
+    ...wordModal.tsx |      75 |      100 |      75 |      75 | 17                
+    UserFilters.tsx  |     100 |       50 |     100 |     100 | 21                
+    UsuariosPage.tsx |    97.9 |    82.35 |     100 |     100 | ...03-204,231-246 
+   src/utils         |   99.47 |       98 |   98.95 |    99.7 |                   
+    ...oard.utils.ts |    98.7 |    95.93 |   95.45 |   99.24 | 120               
+  -------------------|---------|----------|---------|---------|-------------------
+
+   Cobertura = 0 % (sin pruebas todavia): App.tsx, modulo de equipos (EquiposPage, EquipoFicha, SedesPage, EtiquetasQr, catalogo,
+   FichaX, ordenes de trabajo), agendamientos (scheduling), dashboard (AdminOverview, AreaOps, EngineerTasks, widgets), main.tsx.
+
+4b. COBERTURA BACKEND (por archivo; Stmts/Miss/Cover/lineas sin cubrir)
+----------------------------------------------------------------------------------------------------
+  audit\__init__.py                                           0      0   100%
+  audit\admin.py                                             15      0   100%
+  audit\apps.py                                               6      0   100%
+  audit\models.py                                            25      0   100%
+  audit\utils.py                                             13      0   100%
+  branches\__init__.py                                        0      0   100%
+  branches\admin.py                                          11      0   100%
+  branches\apps.py                                            6      0   100%
+  branches\filters.py                                         8      0   100%
+  branches\managers.py                                       17      0   100%
+  branches\models.py                                         26      0   100%
+  branches\serializers.py                                    38      0   100%
+  branches\urls.py                                            6      0   100%
+  branches\views.py                                          25      0   100%
+  catalog\__init__.py                                         0      0   100%
+  catalog\admin.py                                           20      0   100%
+  catalog\apps.py                                             6      0   100%
+  catalog\filters.py                                         16      0   100%
+  catalog\managers.py                                        33      0   100%
+  catalog\models.py                                          32      0   100%
+  catalog\serializers.py                                     49      0   100%
+  catalog\urls.py                                             7      0   100%
+  catalog\views.py                                           41      0   100%
+  common\__init__.py                                          0      0   100%
+  common\area_scope.py                                        7      0   100%
+  common\authentication.py                                   28      0   100%
+  common\file_validation.py                                  36      0   100%
+  common\mixins.py                                            7      0   100%
+  common\pagination.py                                        5      0   100%
+  common\permissions.py                                      27      0   100%
+  common\typing_meta.py                                       3      0   100%
+  common\views.py                                            86      0   100%
+  config\__init__.py                                          2      0   100%
+  config\celery.py                                            6      0   100%
+  config\settings\__init__.py                                 0      0   100%
+  config\settings\base.py                                    90      6    93%
+  config\settings\dev.py                                     13      2    85%
+  config\settings\prod.py                                    15     15     0%
+  config\urls.py                                             23      7    70%
+  dashboard\__init__.py                                       0      0   100%
+  dashboard\urls.py                                           3      0   100%
+  dashboard\views.py                                        163     12    93%
+  equipment\__init__.py                                       0      0   100%
+  equipment\admin.py                                         69      0   100%
+  equipment\apps.py                                           8      0   100%
+  equipment\filters.py                                       15      0   100%
+  equipment\management\__init__.py                            0      0   100%
+  equipment\management\commands\__init__.py                   0      0   100%
+  equipment\management\commands\import_equipment.py         111    111     0%
+  equipment\management\commands\regenerate_qr.py             25     25     0%
+  equipment\managers.py                                      17      0   100%
+  equipment\models.py                                       185      0   100%
+  equipment\reliability.py                                   24      0   100%
+  equipment\serializers.py                                  157      0   100%
+  equipment\services.py                                      19      0   100%
+  equipment\signals.py                                       42      0   100%
+  equipment\tasks.py                                         29     19    34%
+  equipment\urls.py                                          16      0   100%
+  equipment\views.py                                        182      0   100%
+  failures\__init__.py                                        0      0   100%
+  failures\admin.py                                          12      0   100%
+  failures\apps.py                                            8      0   100%
+  failures\filters.py                                        13      0   100%
+  failures\management\__init__.py                             0      0   100%
+  failures\management\commands\__init__.py                    0      0   100%
+  failures\management\commands\import_failures.py            98     98     0%
+  failures\managers.py                                       29      1    97%
+  failures\models.py                                         44      0   100%
+  failures\serializers.py                                    68      3    96%
+  failures\signals.py                                        14      2    86%
+  failures\urls.py                                            6      0   100%
+  failures\views.py                                          35      1    97%
+  maintenance\__init__.py                                     0      0   100%
+  maintenance\admin.py                                       12      0   100%
+  maintenance\apps.py                                         8      0   100%
+  maintenance\filters.py                                     21      1    95%
+  maintenance\management\__init__.py                          0      0   100%
+  maintenance\management\commands\__init__.py                 0      0   100%
+  maintenance\management\commands\import_maintenance.py     109    109     0%
+  maintenance\managers.py                                    45      7    84%
+  maintenance\models.py                                      35      0   100%
+  maintenance\serializers.py                                149      5    97%
+  maintenance\signals.py                                     76      5    93%
+  maintenance\urls.py                                         6      0   100%
+  maintenance\views.py                                       32      4    88%
+  realtime\__init__.py                                        0      0   100%
+  realtime\apps.py                                            6      0   100%
+  realtime\consumers.py                                      30      8    73%
+  realtime\events.py                                         15      0   100%
+  realtime\middleware.py                                     36      0   100%
+  realtime\routing.py                                         3      0   100%
+  scheduling\__init__.py                                      0      0   100%
+  scheduling\admin.py                                        12      0   100%
+  scheduling\apps.py                                          8      0   100%
+  scheduling\filters.py                                      26      3    88%
+  scheduling\management\__init__.py                           0      0   100%
+  scheduling\management\commands\__init__.py                  0      0   100%
+  scheduling\management\commands\import_schedules.py        303     47    84%
+  scheduling\managers.py                                     37      4    89%
+  scheduling\models.py                                       34      0   100%
+  scheduling\serializers.py                                 130     17    87%
+  scheduling\signals.py                                     104      9    91%
+  scheduling\tasks.py                                        76      4    95%
+  scheduling\urls.py                                          6      0   100%
+  scheduling\views.py                                        43      1    98%
+  users\__init__.py                                           0      0   100%
+  users\admin.py                                             12      0   100%
+  users\apps.py                                               6      0   100%
+  users\filters.py                                            8      0   100%
+  users\management\__init__.py                                0      0   100%
+  users\management\commands\__init__.py                       0      0   100%
+  users\management\commands\clean_users.py                  310     45    85%
+  users\management\commands\import_users.py                  74     23    69%
+  users\managers.py                                          48      0   100%
+  users\models.py                                            33      0   100%
+  users\permissions.py                                       22      0   100%
+  users\serializers.py                                      135      0   100%
+  users\urls.py                                               6      0   100%
+  users\views.py                                             95      0   100%
+  workorders\__init__.py                                      0      0   100%
+  workorders\admin.py                                        47      0   100%
+  workorders\apps.py                                          6      0   100%
+  workorders\gaps_tests.py                                  101      0   100%
+  workorders\management\__init__.py                           0      0   100%
+  workorders\management\commands\__init__.py                  0      0   100%
+  workorders\management\commands\import_workorders.py       103    103     0%
+  workorders\models.py                                       53      0   100%
+  workorders\serializers.py                                  60      0   100%
+  workorders\views.py                                        80      0   100%
+  TOTAL                                                    4701    697    85%
+
+5. DETALLE DE PRUEBAS EJECUTADAS
+====================================================================================================
+5.1 BACKEND (576 pruebas)
+----------------------------------------------------------------------------------------------------
+  [audit/tests/test_utils.py]  (3)
+     OK   TestLogAuditEvent::test_creates_record_with_actor_and_ip
+     OK   TestLogAuditEvent::test_anonymous_actor_is_stored_as_null
+     OK   TestLogAuditEvent::test_uses_x_forwarded_for_when_present
+  [branches/tests/test_api.py]  (26)
+     OK   TestBranchAuth::test_list_requires_authentication
+     OK   TestBranchAuth::test_create_requires_authentication
+     OK   TestBranchList::test_list_returns_paginated_branches
+     OK   TestBranchList::test_list_filter_by_city
+     OK   TestBranchList::test_list_filter_by_is_active
+     OK   TestBranchList::test_list_search_by_name
+     OK   TestBranchList::test_list_search_by_address
+     OK   TestBranchList::test_list_ordering_by_city
+     OK   TestBranchRetrieve::test_retrieve_branch
+     OK   TestBranchRetrieve::test_retrieve_missing_returns_404
+     OK   TestBranchCreate::test_create_branch
+     OK   TestBranchCreate::test_create_with_duplicate_name_returns_400_in_spanish
+     OK   TestBranchCreate::test_create_two_branches_without_email
+     OK   TestBranchCreate::test_create_with_duplicate_email_returns_400_in_spanish
+     OK   TestBranchCreate::test_create_with_invalid_phone_returns_400_in_spanish
+     OK   TestBranchCreate::test_create_normalizes_name_whitespace
+     OK   TestBranchCreate::test_create_missing_required_fields_returns_400
+     OK   TestBranchUpdate::test_put_updates_all_fields
+     OK   TestBranchUpdate::test_patch_partial_update
+     OK   TestBranchUpdate::test_patch_with_duplicate_name_returns_400
+     OK   TestBranchUpdate::test_patch_with_same_name_succeeds
+     OK   TestBranchDelete::test_delete_branch
+     OK   TestBranchDelete::test_delete_missing_returns_404
+     OK   TestBranchDelete::test_delete_by_non_management_role_returns_403
+     OK   TestBranchDelete::test_create_by_tecnico_returns_403
+     OK   TestBranchDelete::test_edit_by_tecnico_returns_403
+  [branches/tests/test_models.py]  (9)
+     OK   TestBranchModel::test_branch_str
+     OK   TestBranchModel::test_branch_defaults
+     OK   TestBranchModel::test_phone_validator_rejects_invalid_format
+     OK   TestBranchModel::test_phone_validator_accepts_valid_format
+     OK   TestBranchModel::test_blank_email_is_stored_as_null_and_can_repeat
+     OK   TestBranchManager::test_active_manager_returns_only_active
+     OK   TestBranchManager::test_inactive_manager_returns_only_inactive
+     OK   TestBranchManager::test_by_city_filter
+     OK   TestBranchManager::test_default_ordering_by_name
+  [catalog/tests/test_api.py]  (23)
+     OK   TestBrandAuth::test_list_requires_auth
+     OK   TestBrandAuth::test_create_requires_auth
+     OK   TestBrandCreate::test_create_brand
+     OK   TestBrandCreate::test_duplicate_name_case_insensitive_returns_400
+     OK   TestBrandCreate::test_blank_name_returns_400
+     OK   TestBrandList::test_list_paginated
+     OK   TestBrandList::test_filter_is_active_false
+     OK   TestBrandList::test_search_partial_name
+     OK   TestBrandUpdate::test_patch_is_active
+     OK   TestBrandDelete::test_delete_without_models_returns_204
+     OK   TestBrandDelete::test_delete_with_models_returns_409
+     OK   TestEquipmentModelAuth::test_list_requires_auth
+     OK   TestEquipmentModelCreate::test_create_with_active_brand
+     OK   TestEquipmentModelCreate::test_create_with_inactive_brand_returns_400
+     OK   TestEquipmentModelCreate::test_blank_name_returns_400
+     OK   TestEquipmentModelCreate::test_duplicate_per_brand_returns_400
+     OK   TestEquipmentModelCreate::test_same_name_other_brand_succeeds
+     OK   TestEquipmentModelFilters::test_filter_by_brand
+     OK   TestEquipmentModelFilters::test_filter_by_brand_is_active
+     OK   TestEquipmentModelFilters::test_search_by_name
+     OK   TestEquipmentModelFilters::test_search_by_brand_name
+     OK   TestEquipmentModelDelete::test_delete_without_equipment_returns_204
+     OK   TestEquipmentModelDelete::test_delete_with_equipment_returns_409
+  [catalog/tests/test_models.py]  (7)
+     OK   TestBrandModel::test_str
+     OK   TestBrandModel::test_active_inactive_managers
+     OK   TestEquipmentModelModel::test_str
+     OK   TestEquipmentModelModel::test_unique_per_brand_constraint
+     OK   TestEquipmentModelModel::test_same_name_allowed_across_brands
+     OK   TestEquipmentModelModel::test_for_brand_manager
+     OK   TestEquipmentModelModel::test_with_active_brand_manager
+  [dashboard/tests/test_api.py]  (20)
+     OK   TestAuth::test_requires_auth
+     OK   TestEquipmentKpis::test_counts_by_status
+     OK   TestFailuresKpis::test_critical_open_vs_total_open
+     OK   TestSchedulingKpis::test_next_7_days_ignores_completed_and_far
+     OK   TestSchedulingKpis::test_overdue_counts_pending_in_the_past
+     OK   TestSchedulingKpis::test_overdue_includes_due_today
+     OK   TestMaintenanceKpis::test_this_month_count_and_cost
+     OK   TestDistributions::test_equipment_by_status
+     OK   TestDistributions::test_failures_by_severity
+     OK   TestTimeSeries::test_six_months_with_gaps_filled
+     OK   TestLists::test_overdue_schedules_limit_and_order
+     OK   TestLists::test_worst_mtbf_requires_at_least_two_failures
+     OK   TestMyTasks::test_schedules_filtered_by_user_assignment
+     OK   TestMyTasks::test_failures_empty_in_v1
+     OK   TestTecnicoScopedKpis::test_work_kpis_are_scoped_but_clinic_kpis_are_global
+     OK   TestTecnicoScopedKpis::test_management_sees_global_kpis
+     OK   TestOperativoAreaOps::test_dashboard_shows_only_own_reports
+     OK   TestUsuarioRequestsOps::test_dashboard_shows_only_own_solicitudes
+     OK   TestEngineerTasks::test_kpis_count_only_own_work_orders
+     OK   TestEngineerTasks::test_other_roles_get_null
+  [equipment/tests/test_api.py]  (39)
+     OK   TestEquipmentAuth::test_list_requires_auth
+     OK   TestEquipmentAuth::test_create_requires_auth
+     OK   TestEquipmentCreate::test_create_201_and_qr_url_present
+     OK   TestEquipmentCreate::test_asset_tag_normalized_to_uppercase
+     OK   TestEquipmentCreate::test_sql_like_input_is_stored_as_literal_text
+     OK   TestEquipmentCreate::test_duplicate_asset_tag_case_insensitive
+     OK   TestEquipmentCreate::test_future_purchase_date_returns_400
+     OK   TestEquipmentCreate::test_inactive_branch_returns_400
+     OK   TestEquipmentCreate::test_missing_required_fields
+     OK   TestEquipmentList::test_list_paginated
+     OK   TestEquipmentList::test_filter_by_branch
+     OK   TestEquipmentList::test_filter_by_status
+     OK   TestEquipmentList::test_filter_by_equipment_model
+     OK   TestEquipmentList::test_filter_by_brand
+     OK   TestEquipmentList::test_filter_by_purchase_date_range
+     OK   TestEquipmentList::test_search_by_asset_tag
+     OK   TestEquipmentList::test_search_by_brand_name
+     OK   TestEquipmentList::test_search_by_equipment_model_name
+     OK   TestEquipmentList::test_ordering_by_name
+     OK   TestEquipmentRetrieve::test_retrieve_includes_qr_code_url
+     OK   TestEquipmentRetrieve::test_retrieve_missing_returns_404
+     OK   TestEquipmentByAssetTag::test_resolve_by_tag_case_insensitive
+     OK   TestEquipmentByAssetTag::test_unknown_tag_returns_404
+     OK   TestEquipmentUpdate::test_patch_status
+     OK   TestEquipmentUpdate::test_patch_with_same_asset_tag_no_duplicate_error
+     OK   TestEquipmentUpdate::test_put_replaces_all_fields
+     OK   TestEquipmentRegenerateQr::test_regenerate_replaces_file
+     OK   TestEquipmentRegenerateQr::test_regenerate_all_covers_every_equipment
+     OK   TestEquipmentRegenerateQr::test_regenerate_all_missing_only
+     OK   TestEquipmentRegenerateQr::test_regenerate_all_forbidden_for_tecnico
+     OK   TestEquipmentDelete::test_delete_204_and_removes_qr_file
+     OK   TestEquipmentDelete::test_delete_missing_returns_404
+     OK   TestEquipmentRiskClass::test_create_without_risk_class_defaults_to_null
+     OK   TestEquipmentRiskClass::test_create_with_valid_risk_class
+     OK   TestEquipmentRiskClass::test_create_with_invalid_risk_class_returns_400
+     OK   TestEquipmentRiskClass::test_filter_by_risk_class
+     OK   TestEquipmentRiskClass::test_filter_by_risk_class_isnull_true
+     OK   TestEquipmentModelValidation::test_create_with_inactive_model_returns_400
+     OK   TestEquipmentModelValidation::test_create_with_inactive_brand_returns_400
+  [equipment/tests/test_coverage_gaps.py]  (23)
+     OK   TestEstadoGarantia::test_sin_fecha_devuelve_none
+     OK   TestEstadoGarantia::test_vencida
+     OK   TestEstadoGarantia::test_por_vencer
+     OK   TestEstadoGarantia::test_cerca_de_vencimiento_a_30_dias
+     OK   TestEstadoGarantia::test_lejana_devuelve_none
+     OK   TestStrModelos::test_representaciones
+     OK   TestSenales::test_guardar_sin_cambiar_garantia_no_encola_tarea
+     OK   TestSenales::test_post_delete_de_repuesto_recalcula_costo
+     OK   TestSerializerEquipment::test_qr_code_url_sin_archivo
+     OK   TestSerializerEquipment::test_qr_code_url_normaliza_ruta_relativa
+     OK   TestSerializerEquipment::test_dias_para_vencer_garantia
+     OK   TestSerializerEquipment::test_validadores_de_codigo_y_nombre
+     OK   TestSerializerEquipment::test_imagen_demasiado_grande
+     OK   TestSerializerEquipment::test_uploaded_by_nulo
+     OK   TestSerializerWorkOrder::test_numero_vacio_y_duplicado_en_edicion
+     OK   TestSerializerWorkOrder::test_schedule_info_con_programacion
+     OK   TestSerializerWorkOrder::test_ingeniero_no_puede_finalizar_directo
+     OK   TestViews::test_names_lista_nombres_distintos
+     OK   TestViews::test_tecnico_sin_area_ve_lista_vacia
+     OK   TestViews::test_historial_sin_paginacion
+     OK   TestViews::test_filtro_work_orders_por_nombre_de_equipo
+     OK   TestViews::test_completar_orden_cancelada_falla
+     OK   TestViews::test_registro_de_mantenimiento_por_enlace_agendamiento_y_ninguno
+  [equipment/tests/test_file_validation.py]  (11)
+     OK   TestEquipmentAttachmentFileValidation::test_rejects_disallowed_extension
+     OK   TestEquipmentAttachmentFileValidation::test_rejects_content_that_does_not_match_extension
+     OK   TestEquipmentAttachmentFileValidation::test_rejects_oversized_file
+     OK   TestEquipmentAttachmentFileValidation::test_accepts_valid_file_and_forces_uploaded_by_to_request_user
+     OK   TestEquipmentLifeSheetPdfValidation::test_rejects_non_pdf
+     OK   TestEquipmentLifeSheetPdfValidation::test_accepts_valid_pdf
+     OK   TestEquipmentCertificateFileValidation::test_rejects_non_pdf_non_image
+     OK   TestEquipmentCertificateFileValidation::test_accepts_valid_pdf
+     OK   TestWorkOrderReportAndEvidenceValidation::test_work_order_report_rejects_non_pdf
+     OK   TestWorkOrderReportAndEvidenceValidation::test_evidence_rejects_disallowed_extension
+     OK   TestWorkOrderReportAndEvidenceValidation::test_evidence_accepts_valid_photo
+  [equipment/tests/test_models.py]  (8)
+     OK   TestEquipmentModel::test_str
+     OK   TestEquipmentModel::test_default_status_is_active
+     OK   TestEquipmentModel::test_default_risk_class_is_none
+     OK   TestEquipmentModel::test_risk_class_choices_are_invima
+     OK   TestEquipmentManager::test_active_returns_only_active
+     OK   TestEquipmentManager::test_in_repair_returns_maintenance_and_repair
+     OK   TestEquipmentManager::test_for_branch_filters_by_branch_id
+     OK   TestEquipmentManager::test_select_related_avoids_n_plus_1
+  [equipment/tests/test_permissions.py]  (8)
+     OK   TestEquipmentRolePermissions::test_tecnico_cannot_delete
+     OK   TestEquipmentRolePermissions::test_coordinador_cannot_delete
+     OK   TestEquipmentRolePermissions::test_coordinador_can_edit
+     OK   TestEquipmentRolePermissions::test_ingeniero_cannot_edit
+     OK   TestEquipmentRolePermissions::test_tecnico_cannot_create
+     OK   TestEquipmentRolePermissions::test_coordinador_can_create
+     OK   TestEquipmentRolePermissions::test_tecnico_can_view
+     OK   TestEquipmentRolePermissions::test_admin_delete_leaves_audit_log
+  [equipment/tests/test_reliability.py]  (11)
+     OK   TestComputeMetrics::test_no_failures_yields_null
+     OK   TestComputeMetrics::test_one_failure_unresolved_both_null
+     OK   TestComputeMetrics::test_one_failure_resolved_mtbf_null_mttr_set
+     OK   TestComputeMetrics::test_two_failures_mtbf_is_delta
+     OK   TestComputeMetrics::test_three_failures_mtbf_is_mean_of_deltas
+     OK   TestComputeMetrics::test_mttr_averages_only_resolved
+     OK   TestSignalRecomputes::test_create_triggers_recompute
+     OK   TestSignalRecomputes::test_mark_resolved_recomputes_mttr
+     OK   TestSignalRecomputes::test_delete_recomputes
+     OK   TestSerializerReadonly::test_metrics_appear_in_response
+     OK   TestSerializerReadonly::test_metrics_ignored_on_write
+  [equipment/tests/test_services.py]  (5)
+     OK   TestBuildQrPayload::test_payload_points_to_life_sheet_by_id
+     OK   TestBuildQrPayload::test_strips_trailing_slash
+     OK   TestGenerateQrForEquipment::test_creates_png_file
+     OK   TestGenerateQrForEquipment::test_filename_uses_equipment_id
+     OK   TestGenerateQrForEquipment::test_replaces_existing_file_when_called_again
+  [equipment/tests/test_signals.py]  (3)
+     OK   TestAutoGenerateQrSignal::test_post_save_generates_qr_on_create
+     OK   TestAutoGenerateQrSignal::test_post_save_does_not_regenerate_on_update
+     OK   TestRemoveQrFileSignal::test_pre_delete_removes_file_from_storage
+  [equipment/tests/test_work_orders.py]  (22)
+     OK   TestWorkOrderCrud::test_create_and_list
+     OK   TestWorkOrderCrud::test_duplicate_number_returns_400
+     OK   TestWorkOrderCrud::test_end_before_start_returns_400
+     OK   TestWorkOrderCrud::test_filter_by_equipment_and_status
+     OK   TestWorkOrderChildren::test_spare_part_total_cost_is_computed
+     OK   TestWorkOrderChildren::test_details_action_nests_children
+     OK   TestWorkOrderChildren::test_filter_children_by_work_order
+     OK   TestWorkOrderPermissions::test_tecnico_cannot_create
+     OK   TestWorkOrderPermissions::test_tecnico_cannot_delete
+     OK   TestWorkOrderScopedByRole::test_field_role_only_sees_own_orders
+     OK   TestWorkOrderScopedByRole::test_management_sees_all_orders
+     OK   TestWorkOrderScopedByRole::test_field_role_created_order_is_self_assigned
+     OK   TestWorkOrderScopedByRole::test_field_role_cannot_touch_others_order
+     OK   TestWorkOrderScopedByRole::test_field_role_can_work_on_own_order_children
+     OK   TestWorkOrderCompleteCreatesFailure::test_complete_without_failure_fields_leaves_no_report
+     OK   TestWorkOrderCompleteCreatesFailure::test_finish_with_future_start_still_sets_end_date
+     OK   TestWorkOrderCompleteCreatesFailure::test_engineer_complete_creates_resolved_failure
+     OK   TestWorkOrderCompleteCreatesFailure::test_complete_does_not_duplicate_failure_on_second_call
+     OK   TestWorkOrderCompleteCreatesFailure::test_invalid_severity_does_not_finish_order
+     OK   TestWorkOrderCompleteCreatesFailure::test_complete_requires_resolution_notes
+     OK   TestWorkOrderCompleteCreatesFailure::test_in_progress_does_not_finish
+     OK   TestWorkOrderCompleteCreatesFailure::test_engineer_cannot_finish_from_pending
+  [failures/tests/test_api.py]  (37)
+     OK   TestFailureAuth::test_list_requires_auth
+     OK   TestFailureAuth::test_create_requires_auth
+     OK   TestFailureAuth::test_resolve_requires_auth
+     OK   TestFailureCreate::test_create_returns_201
+     OK   TestFailureCreate::test_create_defaults_reported_at_to_now
+     OK   TestFailureCreate::test_create_strips_description
+     OK   TestFailureCreate::test_create_with_empty_description_returns_400
+     OK   TestFailureCreate::test_create_with_future_reported_at_returns_400
+     OK   TestFailureCreate::test_create_with_resolved_at_but_not_resolved_returns_400
+     OK   TestFailureCreate::test_create_with_resolved_at_before_reported_at_returns_400
+     OK   TestFailureCreate::test_create_resolved_true_without_resolved_at_autofills
+     OK   TestFailureCreate::test_create_missing_required_returns_400
+     OK   TestFailureList::test_list_paginated
+     OK   TestFailureList::test_filter_by_equipment
+     OK   TestFailureList::test_filter_by_branch
+     OK   TestFailureList::test_filter_by_severity
+     OK   TestFailureList::test_filter_by_resolved
+     OK   TestFailureList::test_filter_by_reported_at_range
+     OK   TestFailureList::test_search_by_description
+     OK   TestFailureList::test_search_by_resolution_notes
+     OK   TestFailureList::test_search_by_asset_tag
+     OK   TestFailureList::test_default_ordering_desc_by_reported_at
+     OK   TestFailureRetrieve::test_retrieve
+     OK   TestFailureRetrieve::test_retrieve_missing_returns_404
+     OK   TestFailureUpdate::test_patch_partial
+     OK   TestFailureUpdate::test_put_replaces_all_fields
+     OK   TestFailureUpdate::test_patch_with_invalid_resolved_at_returns_400
+     OK   TestFailureDelete::test_delete
+     OK   TestFailureDelete::test_delete_missing_returns_404
+     OK   TestResolveAction::test_resolve_marks_failure_resolved
+     OK   TestResolveAction::test_resolve_persists_notes
+     OK   TestResolveAction::test_resolve_is_idempotent
+     OK   TestResolveAction::test_resolve_missing_returns_404
+     OK   TestOperativoFailureScope::test_lists_only_own_reports_in_own_area
+     OK   TestOperativoFailureScope::test_create_sets_reported_by_and_stays_in_area
+     OK   TestOperativoFailureScope::test_cannot_report_other_area_equipment
+     OK   TestOperativoFailureScope::test_cannot_resolve
+  [failures/tests/test_models.py]  (12)
+     OK   TestFailureRecordModel::test_str_format
+     OK   TestFailureRecordModel::test_default_ordering_is_reported_at_desc
+     OK   TestFailureRecordModel::test_default_unresolved
+     OK   TestMarkResolved::test_mark_resolved_sets_flags_and_timestamp
+     OK   TestMarkResolved::test_mark_resolved_without_notes_keeps_existing
+     OK   TestMarkResolved::test_mark_resolved_is_idempotent
+     OK   TestFailureRecordManager::test_open_returns_only_unresolved
+     OK   TestFailureRecordManager::test_resolved_returns_only_resolved
+     OK   TestFailureRecordManager::test_critical_returns_only_critical
+     OK   TestFailureRecordManager::test_for_equipment_filters_by_equipment
+     OK   TestFailureRecordManager::test_for_branch_filters_by_branch
+     OK   TestResolvedConsistencyConstraint::test_bulk_update_resolved_true_without_resolved_at_fails
+  [maintenance/tests/test_api.py]  (36)
+     OK   TestMaintenanceAuth::test_list_requires_auth
+     OK   TestMaintenanceAuth::test_create_requires_auth
+     OK   TestMaintenanceCreate::test_create_without_pdf_returns_201
+     OK   TestMaintenanceCreate::test_create_with_observations_roundtrips
+     OK   TestMaintenanceCreate::test_observations_optional_defaults_blank
+     OK   TestMaintenanceCreate::test_create_strips_description
+     OK   TestMaintenanceCreate::test_create_with_future_date_returns_400
+     OK   TestMaintenanceCreate::test_create_with_empty_description_returns_400
+     OK   TestMaintenanceCreate::test_create_with_negative_cost_returns_400
+     OK   TestMaintenanceCreate::test_create_missing_required_fields_returns_400
+     OK   TestMaintenanceListScopedByRole::test_tecnico_only_sees_own_finished_maintenances
+     OK   TestMaintenanceListScopedByRole::test_open_work_order_hides_record_from_technician_history
+     OK   TestMaintenanceListScopedByRole::test_management_sees_all_including_in_progress
+     OK   TestMaintenanceListScopedByRole::test_ingeniero_only_sees_own_finished_maintenances
+     OK   TestMaintenanceList::test_list_paginated
+     OK   TestMaintenanceList::test_filter_by_equipment
+     OK   TestMaintenanceList::test_filter_by_kind
+     OK   TestMaintenanceList::test_filter_by_date_range
+     OK   TestMaintenanceList::test_filter_by_branch
+     OK   TestMaintenanceList::test_search_by_description
+     OK   TestMaintenanceList::test_search_by_technician
+     OK   TestMaintenanceList::test_search_by_equipment_asset_tag
+     OK   TestMaintenanceList::test_default_ordering_desc_by_date
+     OK   TestMaintenanceList::test_ordering_by_cost_asc
+     OK   TestMaintenanceRetrieve::test_retrieve_record
+     OK   TestMaintenanceRetrieve::test_retrieve_missing_returns_404
+     OK   TestMaintenanceUpdate::test_patch_partial_update
+     OK   TestMaintenanceUpdate::test_put_replaces_all_fields
+     OK   TestMaintenanceUpdate::test_technician_field_is_read_only_and_derived
+     OK   TestMaintenanceUpdate::test_patch_with_future_date_returns_400
+     OK   TestMaintenanceDelete::test_delete_record
+     OK   TestMaintenanceDelete::test_delete_missing_returns_404
+     OK   TestEquipmentHistoryAction::test_history_returns_only_records_of_equipment
+     OK   TestEquipmentHistoryAction::test_history_paginated_response
+     OK   TestEquipmentHistoryAction::test_history_returns_404_for_unknown_equipment
+     OK   TestEquipmentHistoryAction::test_history_requires_auth
+  [maintenance/tests/test_assignment.py]  (19)
+     OK   TestMaintenanceAssignmentCreate::test_create_with_engineer_and_technician_returns_201
+     OK   TestMaintenanceAssignmentCreate::test_create_without_assignment_keeps_fields_null
+     OK   TestMaintenanceAssignmentCreate::test_create_with_only_engineer_returns_201
+     OK   TestMaintenanceAssignmentCreate::test_create_engineer_with_wrong_role_returns_400
+     OK   TestMaintenanceAssignmentCreate::test_create_technician_with_wrong_role_returns_400
+     OK   TestMaintenanceAssignmentCreate::test_create_engineer_with_other_role_returns_400
+     OK   TestMaintenanceAssignmentCreate::test_create_with_inactive_engineer_returns_400
+     OK   TestMaintenanceAssignmentCreate::test_create_with_inactive_technician_returns_400
+     OK   TestMaintenanceAssignmentUpdate::test_patch_assigns_engineer_and_technician
+     OK   TestMaintenanceAssignmentUpdate::test_patch_clears_assignment_with_null
+     OK   TestMaintenanceAssignmentFilters::test_filter_by_assigned_engineer
+     OK   TestMaintenanceAssignmentFilters::test_filter_by_assigned_technician
+     OK   TestMaintenanceAssignmentFilters::test_filter_unassigned_true
+     OK   TestMaintenanceAssignmentFilters::test_filter_unassigned_false
+     OK   TestMaintenanceAssignmentFilters::test_search_by_assigned_engineer_name
+     OK   TestMaintenanceAssignmentManager::test_assigned_to_engineer_scope
+     OK   TestMaintenanceAssignmentManager::test_assigned_to_technician_scope
+     OK   TestMaintenanceAssignmentManager::test_unassigned_scope
+     OK   TestMaintenanceAssignmentOnUserDelete::test_user_delete_sets_assignment_to_null
+  [maintenance/tests/test_models.py]  (5)
+     OK   TestMaintenanceRecordModel::test_str_format
+     OK   TestMaintenanceRecordModel::test_default_ordering_is_date_desc_then_created_desc
+     OK   TestMaintenanceRecordManager::test_for_equipment_filters_by_equipment
+     OK   TestMaintenanceRecordManager::test_preventive_returns_only_preventive
+     OK   TestMaintenanceRecordManager::test_in_range_filters_by_date_range
+  [maintenance/tests/test_permissions.py]  (7)
+     OK   TestMaintenanceRecordDeletePermissions::test_tecnico_cannot_delete
+     OK   TestMaintenanceRecordDeletePermissions::test_admin_cannot_delete
+     OK   TestMaintenanceRecordDeletePermissions::test_coordinador_delete_leaves_audit_log
+     OK   TestSuperadminIsReadOnly::test_superadmin_can_list_and_retrieve
+     OK   TestSuperadminIsReadOnly::test_superadmin_cannot_create
+     OK   TestSuperadminIsReadOnly::test_superadmin_cannot_edit
+     OK   TestSuperadminIsReadOnly::test_superadmin_cannot_delete
+  [maintenance/tests/test_schedule_link.py]  (10)
+     OK   TestCreateLinkedToSchedule::test_create_record_with_schedule_completes_it
+     OK   TestCreateLinkedToSchedule::test_create_without_link_leaves_field_null
+     OK   TestCreateLinkedToSchedule::test_create_with_schedule_for_different_equipment_returns_400
+     OK   TestCreateLinkedToSchedule::test_create_with_already_completed_schedule_returns_400
+     OK   TestCreateLinkedToSchedule::test_one_to_one_blocks_double_link
+     OK   TestUpdateLink::test_patch_can_set_link_when_unset
+     OK   TestUpdateLink::test_patch_cannot_replace_existing_link
+     OK   TestUpdateLink::test_patch_resending_same_link_is_ok
+     OK   TestScheduleSerializerExposesReverse::test_schedule_detail_includes_maintenance_record_null_by_default
+     OK   TestScheduleSerializerExposesReverse::test_schedule_detail_includes_maintenance_record_when_linked
+  [maintenance/tests/test_uploads.py]  (6)
+     OK   TestPdfUploadCreate::test_upload_valid_pdf_returns_201
+     OK   TestPdfUploadCreate::test_upload_non_pdf_extension_returns_400
+     OK   TestPdfUploadCreate::test_upload_oversize_pdf_returns_400
+     OK   TestPdfReplaceOnPatch::test_patch_with_new_pdf_replaces_previous_file
+     OK   TestPdfDeleteOnRecordDelete::test_delete_record_removes_pdf_from_storage
+     OK   TestPdfDeleteOnRecordDelete::test_delete_record_without_pdf_does_not_error
+  [maintenance/tests/test_work_order_sync.py]  (4)
+     OK   test_record_without_assignee_has_no_work_order
+     OK   test_assigned_record_creates_work_order
+     OK   test_reassigning_record_moves_the_work_order
+     OK   test_record_linked_to_schedule_does_not_double_up
+  [realtime/tests/test_notifications.py]  (9)
+     OK   test_anonymous_handshake_is_closed_with_4401
+     FALLO  test_invalid_token_is_closed_with_4401
+     OK   test_authenticated_user_connects_and_forwards_group_messages
+     OK   test_authenticated_user_via_bearer_header_connects
+     FALLO  test_channel_layer_outage_closes_with_1013
+     OK   test_broadcast_notification_wraps_payload_in_envelope
+     OK   test_broadcast_notification_is_noop_without_layer
+     OK   test_broadcast_notification_swallows_channel_layer_errors
+     OK   TestScheduleEmailBroadcast::test_task_broadcasts_after_email
+  [scheduling/tests/test_api.py]  (34)
+     OK   TestSchedulingAuth::test_list_requires_auth
+     OK   TestSchedulingAuth::test_create_requires_auth
+     OK   TestScheduleCreate::test_create_returns_201
+     OK   TestScheduleCreate::test_create_without_scheduled_date_returns_201
+     OK   TestScheduleCreate::test_create_strips_notes
+     OK   TestScheduleCreate::test_create_with_past_date_returns_400
+     OK   TestScheduleCreate::test_create_with_inactive_equipment_returns_400
+     OK   TestScheduleCreate::test_create_missing_required_returns_400
+     OK   TestScheduleCreate::test_create_without_scheduled_date_sets_requested_by
+     OK   TestScheduleCreate::test_create_ignores_requested_date
+     OK   TestRequestingArea::test_uses_requester_area
+     OK   TestRequestingArea::test_falls_back_to_equipment_area
+     OK   TestScheduleList::test_list_paginated
+     OK   TestScheduleList::test_filter_by_equipment
+     OK   TestScheduleList::test_filter_by_branch
+     OK   TestScheduleList::test_filter_by_kind
+     OK   TestScheduleList::test_filter_by_is_completed
+     OK   TestScheduleList::test_filter_by_scheduled_date_range
+     OK   TestScheduleList::test_search_by_notes
+     OK   TestScheduleList::test_search_by_asset_tag
+     OK   TestScheduleListScopedByRole::test_tecnico_only_sees_own_assignments
+     OK   TestScheduleListScopedByRole::test_tecnico_sees_requests_they_created
+     OK   TestScheduleListScopedByRole::test_usuario_only_sees_own_requests
+     OK   TestScheduleListScopedByRole::test_management_sees_all
+     OK   TestScheduleListScopedByRole::test_ingeniero_only_sees_assigned_or_requested
+     OK   TestScheduleListScopedByRole::test_ingeniero_cannot_create
+     OK   TestScheduleRetrieve::test_retrieve
+     OK   TestScheduleRetrieve::test_retrieve_missing_returns_404
+     OK   TestScheduleUpdate::test_patch_partial
+     OK   TestScheduleUpdate::test_patch_ignores_equipment_and_kind
+     OK   TestScheduleUpdate::test_patch_allows_past_date_when_only_completing
+     OK   TestScheduleDelete::test_delete
+     OK   TestCompleteAction::test_complete_marks_is_completed
+     OK   TestNotifyAction::test_notify_enqueues_task
+  [scheduling/tests/test_assignment.py]  (17)
+     OK   TestScheduleAssignmentCreate::test_create_with_engineer_and_technician_returns_201
+     OK   TestScheduleAssignmentCreate::test_create_without_assignment_keeps_fields_null
+     OK   TestScheduleAssignmentCreate::test_create_engineer_with_wrong_role_returns_400
+     OK   TestScheduleAssignmentCreate::test_create_technician_with_wrong_role_returns_400
+     OK   TestScheduleAssignmentCreate::test_create_with_coordinator_returns_400
+     OK   TestScheduleAssignmentCreate::test_create_with_inactive_engineer_returns_400
+     OK   TestScheduleAssignmentUpdate::test_patch_assigns_engineer_and_technician
+     OK   TestScheduleAssignmentUpdate::test_patch_clears_assignment_with_null
+     OK   TestScheduleAssignmentFilters::test_filter_by_assigned_engineer
+     OK   TestScheduleAssignmentFilters::test_filter_by_assigned_technician
+     OK   TestScheduleAssignmentFilters::test_filter_unassigned_true
+     OK   TestScheduleAssignmentFilters::test_search_by_assigned_engineer_name
+     OK   TestScheduleAssignmentManager::test_assigned_to_engineer_scope
+     OK   TestScheduleAssignmentManager::test_unassigned_scope
+     OK   TestScheduleAssignmentOnUserDelete::test_user_delete_sets_assignment_to_null
+     OK   TestScheduleAssignmentInEmail::test_email_includes_engineer_and_technician_when_assigned
+     OK   TestScheduleAssignmentInEmail::test_email_omits_assignment_lines_when_unassigned
+  [scheduling/tests/test_import_schedules.py]  (6)
+     OK   test_importa_hoja_con_punto_y_coma_y_fecha_con_hora
+     OK   test_codigo_equipo_tiene_prioridad_y_no_invierte_el_mes
+     OK   test_fecha_vacia_usa_inicio_de_orden_y_omite_tipo_desconocido
+     OK   test_ignora_nt_y_toma_la_placa_del_texto
+     OK   test_placa_con_ceros_coincide_con_la_placa_guardada
+     OK   test_no_importa_equipo_inactivo
+  [scheduling/tests/test_models.py]  (5)
+     OK   TestMaintenanceScheduleModel::test_str_format
+     OK   TestMaintenanceScheduleModel::test_default_ordering_is_scheduled_date_asc
+     OK   TestMaintenanceScheduleManager::test_pending_returns_only_pending
+     OK   TestMaintenanceScheduleManager::test_for_equipment_filters_by_equipment
+     OK   TestMaintenanceScheduleManager::test_in_range_filters_by_date_range
+  [scheduling/tests/test_permissions.py]  (4)
+     OK   TestSchedulingRolePermissions::test_tecnico_can_create_request
+     OK   TestSchedulingRolePermissions::test_usuario_can_create_request
+     OK   TestSchedulingRolePermissions::test_tecnico_cannot_edit_or_complete
+     OK   TestSchedulingRolePermissions::test_ingeniero_can_view_assigned_but_cannot_mutate
+  [scheduling/tests/test_signals.py]  (11)
+     OK   TestScheduleNotificationSignal::test_post_save_created_enqueues_task
+     OK   TestScheduleNotificationSignal::test_post_save_updated_does_not_enqueue
+     OK   TestScheduleNotificationSignal::test_post_save_assigning_engineer_enqueues_task
+     OK   TestScheduleNotificationSignal::test_post_save_notes_do_not_enqueue_when_already_assigned
+     OK   TestEquipmentStatusFromSchedule::test_request_without_date_sets_in_maintenance
+     OK   TestEquipmentStatusFromSchedule::test_programming_preventive_sets_in_maintenance
+     OK   TestEquipmentStatusFromSchedule::test_programming_repair_sets_in_repair
+     OK   TestEquipmentStatusFromSchedule::test_repair_wins_over_preventive
+     OK   TestEquipmentStatusFromSchedule::test_completing_restores_active
+     OK   TestEquipmentStatusFromSchedule::test_deleting_programmed_schedule_restores_active
+     OK   TestEquipmentStatusFromSchedule::test_does_not_overwrite_inactive
+  [scheduling/tests/test_tasks.py]  (10)
+     OK   TestSendScheduleNotification::test_sends_email_to_configured_recipients
+     OK   TestSendScheduleNotification::test_sets_notified_at_after_send
+     OK   TestSendScheduleNotification::test_includes_branch_email_when_present
+     OK   TestSendScheduleNotification::test_returns_no_recipients_when_empty
+     OK   TestSendScheduleNotification::test_returns_not_found_for_missing_schedule
+     OK   TestSendScheduleNotification::test_includes_assigned_engineer_email
+     OK   TestOverdueAlerts::test_queues_only_overdue_with_stagger
+     OK   TestOverdueAlerts::test_enqueue_lock_avoids_burst
+     OK   TestOverdueAlerts::test_send_overdue_alert_broadcasts_once
+     OK   TestOverdueAlerts::test_send_overdue_alert_skips_future
+  [scheduling/tests/test_work_order_sync.py]  (6)
+     OK   test_unassigned_schedule_has_no_work_order
+     OK   test_assigning_technician_creates_work_order
+     OK   test_assigning_is_idempotent
+     OK   test_reassigning_updates_work_order_technician
+     OK   test_finishing_work_order_completes_schedule_and_logs_record
+     OK   test_completed_schedule_does_not_spawn_work_order
+  [users/tests/test_api.py]  (40)
+     OK   TestUserAuth::test_list_requires_auth
+     OK   TestUserAuth::test_me_requires_auth
+     OK   TestUserPermissions::test_tecnico_cannot_list
+     OK   TestUserPermissions::test_ingeniero_can_list_assignable_staff
+     OK   TestUserPermissions::test_coordinador_can_list_assignable_staff
+     OK   TestUserPermissions::test_admin_can_list
+     OK   TestUserPermissions::test_superadmin_can_list
+     OK   TestUserPermissions::test_tecnico_cannot_create
+     OK   TestUserPermissions::test_admin_cannot_create_superadmin
+     OK   TestUserPermissions::test_superadmin_can_create_superadmin
+     OK   TestUserPermissions::test_tecnico_can_retrieve_self
+     OK   TestUserPermissions::test_tecnico_cannot_retrieve_other
+     OK   TestUserPermissions::test_tecnico_cannot_patch_other
+     OK   TestUserPermissions::test_tecnico_cannot_delete
+     OK   TestUserList::test_list_paginated
+     OK   TestUserList::test_filter_by_role
+     OK   TestUserList::test_filter_is_active
+     OK   TestUserList::test_search_by_username
+     OK   TestUserList::test_ordering
+     OK   TestUserCreate::test_create_persists_and_hashes_password
+     OK   TestUserCreate::test_duplicate_username_case_insensitive
+     OK   TestUserCreate::test_duplicate_email_case_insensitive
+     OK   TestUserCreate::test_password_too_short
+     OK   TestUserCreate::test_phone_invalid
+     OK   TestUserCreate::test_missing_required_fields
+     OK   TestUserUpdate::test_admin_patch_first_name
+     OK   TestUserUpdate::test_admin_cannot_promote_to_superadmin
+     OK   TestUserUpdate::test_superadmin_can_promote_to_superadmin
+     OK   TestUserUpdate::test_patch_same_username_does_not_trigger_duplicate
+     OK   TestUserUpdate::test_self_patch_phone_ok
+     OK   TestUserUpdate::test_self_cannot_change_own_role
+     OK   TestUserDelete::test_admin_deletes_user
+     OK   TestUserDelete::test_self_delete_returns_409
+     OK   TestUserDelete::test_delete_nonexistent_returns_404
+     OK   TestUserMe::test_returns_current_user
+     OK   TestSetPassword::test_self_change_with_correct_current
+     OK   TestSetPassword::test_self_change_with_wrong_current
+     OK   TestSetPassword::test_self_change_password_too_short
+     OK   TestSetPassword::test_admin_changes_other_without_current
+     OK   TestSetPassword::test_tecnico_cannot_change_other
+  [users/tests/test_auth_security.py]  (10)
+     OK   TestLoginThrottle::test_sixth_attempt_in_a_minute_is_throttled
+     OK   TestLoginLockout::test_locks_out_after_failure_limit_even_with_correct_password
+     OK   TestClassicTokenEndpoints::test_login_returns_tokens_in_body
+     OK   TestClassicTokenEndpoints::test_authenticate_with_bearer_header_from_login_response
+     OK   TestClassicTokenEndpoints::test_refresh_accepts_body_token_and_returns_body_access
+     OK   TestJwtLogoutBlacklist::test_blacklisted_refresh_token_cannot_be_reused
+     OK   TestCookieAuth::test_login_sets_httponly_cookies_and_no_tokens_in_body
+     OK   TestCookieAuth::test_refresh_without_cookie_is_rejected
+     OK   TestCookieAuth::test_refresh_uses_cookie_and_rotates_it
+     OK   TestSecurityHeaders::test_response_includes_content_security_policy
+  [users/tests/test_clean_users.py]  (7)
+     OK   test_el_archivo_limpio_entra_en_import_users
+     OK   test_limpia_columnas_sin_imprimir_celdas
+     OK   test_rol_por_fila_y_valor_por_defecto
+     OK   test_convierte_xlsx_a_csv_sin_imprimir_celdas
+     OK   test_xlsx_repite_username_y_lee_mailto
+     OK   test_dry_run_no_escribe_archivo
+     OK   test_rechaza_rol_salida_igual_al_origen_y_cabecera_faltante
+  [users/tests/test_common_gaps.py]  (15)
+     OK   TestEnforceCsrf::test_rechaza_post_sin_token_csrf
+     OK   TestEnforceCsrf::test_acepta_cuando_csrf_valido
+     OK   TestEnforceCsrf::test_vista_interna_devuelve_response
+     OK   TestCookieJWTAuthentication::test_cookie_str_se_codifica_y_exige_csrf_en_metodos_inseguros
+     OK   TestCookieJWTAuthentication::test_get_no_exige_csrf
+     OK   TestCookieJWTAuthentication::test_sin_cookie_ni_header_devuelve_none
+     OK   TestLogoutBlacklist::test_logout_con_refresh_invalido_no_falla_y_borra_cookies
+     OK   TestHealthView::test_ok_cuando_db_y_redis_responden
+     OK   TestHealthView::test_degradado_cuando_redis_falla
+     OK   TestHealthView::test_degradado_cuando_db_falla
+     OK   TestHasRolePermission::test_anonimo_denegado
+     OK   TestHasRolePermission::test_vista_sin_recurso_no_restringe
+     OK   TestAreaScope::test_casos
+     OK   TestFileValidationEmpty::test_valor_vacio_se_devuelve_tal_cual
+     OK   TestFileValidationEmpty::test_extension_no_permitida
+  [users/tests/test_coverage_gaps.py]  (24)
+     OK   TestUserCreateSerializer::test_username_en_blanco_rechazado
+     OK   TestUserCreateSerializer::test_validadores_rechazan_vacio[validate_username-nombre de usuario]
+     OK   TestUserCreateSerializer::test_validadores_rechazan_vacio[validate_first_name-nombres]
+     OK   TestUserCreateSerializer::test_validadores_rechazan_vacio[validate_last_name-apellidos]
+     OK   TestUserCreateSerializer::test_password_debil_rechazada_por_validadores_django
+     OK   TestUserCreateSerializer::test_create_con_is_active_false_desactiva_usuario
+     OK   TestUserUpdateSerializer::test_username_duplicado_ignorando_mayusculas
+     OK   TestUserUpdateSerializer::test_username_vacio_en_validador
+     OK   TestUserUpdateSerializer::test_email_duplicado_y_normalizacion
+     OK   TestUserUpdateSerializer::test_nombres_vacios[validate_first_name]
+     OK   TestUserUpdateSerializer::test_nombres_vacios[validate_last_name]
+     OK   TestUserUpdateSerializer::test_nombres_validos_se_normalizan
+     OK   TestPasswordChangeSerializer::test_password_comun_rechazada
+     OK   TestPasswordChangeSerializer::test_self_sin_current_password
+     OK   TestViewsBranches::test_set_password_usa_serializer_de_cambio
+     OK   TestViewsBranches::test_queryset_vacio_para_usuario_no_modelo
+     OK   TestViewsBranches::test_admin_no_puede_cambiar_password_de_superadmin
+     OK   TestViewsBranches::test_admin_no_puede_modificar_superadmin
+     OK   TestViewsBranches::test_admin_no_puede_eliminar_superadmin
+     OK   TestViewsBranches::test_tecnico_no_puede_editar_a_otro
+     OK   TestIsSelf::test_permisos
+     OK   TestUserManagerSuperuser::test_exige_is_staff_e_is_superuser
+     OK   TestUserManagerSuperuser::test_manager_es_usermanager
+     OK   TestUserSerializerMisc::test_mock_import_ok
+  [users/tests/test_models.py]  (13)
+     OK   TestUserModel::test_str
+     OK   TestUserModel::test_default_role_is_tecnico
+     OK   TestUserModel::test_is_admin_role_property
+     OK   TestUserModel::test_phone_invalid_raises
+     OK   TestUserModel::test_phone_valid
+     OK   TestUserModel::test_email_unique
+     OK   TestUserManager::test_active_inactive
+     OK   TestUserManager::test_by_role
+     OK   TestUserManager::test_staff_roles
+     OK   TestUserManager::test_create_user_defaults
+     OK   TestUserManager::test_create_superuser_defaults
+     OK   TestUserManager::test_create_user_requires_username
+     OK   TestUserManager::test_create_user_requires_email
+  [workorders/gaps_tests.py]  (11)
+     OK   TestWorkOrderModelsStr::test_representaciones
+     OK   TestSparePartSerializer::test_validaciones
+     OK   TestSparePartSerializer::test_update_recalcula_total
+     OK   TestWorkOrderChildViews::test_no_se_puede_borrar_detalle_de_orden_terminada
+     OK   TestWorkOrderChildViews::test_si_la_orden_esta_abierta_se_borra
+     OK   TestAudit::test_str_y_admin_solo_lectura
+     OK   TestBranches::test_nombre_vacio_y_email_nulo
+     OK   TestBranches::test_eliminar_sede_con_equipos_devuelve_409
+     OK   TestCatalog::test_managers_active_inactive
+     OK   TestCatalog::test_marca_duplicada_excluye_instancia_en_edicion
+     OK   TestCatalog::test_modelo_duplicado_excluye_instancia_en_edicion
+
+5.2 FRONTEND (376 pruebas)
+----------------------------------------------------------------------------------------------------
+  [src/pages/public.test.tsx]  (19)
+     OK   LoginPage > muestra el formulario y el aviso de registro deshabilitado
+     OK   LoginPage > con registro habilitado muestra el enlace
+     OK   LoginPage > inicia sesión y navega al panel
+     OK   LoginPage > respeta state.from y ?next= internos y descarta externos
+     OK   LoginPage > usa ?next= y bloquea redirecciones externas
+     OK   LoginPage > muestra el error del backend o el genérico
+     OK   RegistroPage > valida todos los campos obligatorios
+     OK   RegistroPage > valida formatos de documento, correo y contraseña
+     OK   RegistroPage > envía la solicitud y muestra la confirmación
+     OK   RecuperarPasswordPage / NotFound / Placeholder / Home > Recuperar explica el procedimiento
+     OK   RecuperarPasswordPage / NotFound / Placeholder / Home > NotFound muestra 'Ir al panel' solo autenticado
+     OK   RecuperarPasswordPage / NotFound / Placeholder / Home > Placeholder con y sin descripción
+     OK   RecuperarPasswordPage / NotFound / Placeholder / Home > Home muestra secciones y el CTA de registro según la bandera
+     OK   PerfilPage > sin usuario no renderiza nada
+     OK   PerfilPage > muestra los datos del usuario (con y sin sede/teléfono)
+     OK   PerfilPage > cierra sesión y navega al login
+     OK   PerfilPage > valida longitud y coincidencia
+     OK   PerfilPage > cambia la contraseña con éxito
+     OK   PerfilPage > muestra el error del backend y permite cancelar
+  [src/pages/admin/users/users.test.tsx]  (23)
+     OK   UsuariosPage > lista usuarios con estado y acciones según permisos
+     OK   UsuariosPage > muestra estado vacío y error de carga
+     OK   UsuariosPage > muestra el mensaje de error si falla la carga
+     OK   UsuariosPage > tolera fallo al cargar opciones del buscador
+     OK   UsuariosPage > filtra por rol, estado y búsqueda (con vuelta a la página 1)
+     OK   UsuariosPage > pagina hacia adelante y atrás
+     OK   UsuariosPage > crear > crea un usuario (técnico requiere área) y recarga
+     OK   UsuariosPage > crear > crea sin teléfono y con rol no técnico (área vacía)
+     OK   UsuariosPage > crear > alerta si el backend rechaza
+     OK   UsuariosPage > crear > cancela el modal
+     OK   UsuariosPage > editar > edita y guarda con is_active
+     OK   UsuariosPage > editar > alerta cuando falla el guardado
+     OK   UsuariosPage > editar > bloquea asignar un rol no permitido
+     OK   UsuariosPage > eliminar > confirma y elimina
+     OK   UsuariosPage > eliminar > alerta si falla y permite cancelar
+     OK   UsuariosPage > activar / desactivar > desactivar pide confirmación y actualiza
+     OK   UsuariosPage > activar / desactivar > activar es inmediato; si falla revierte y alerta
+     OK   UsuariosPage > activar / desactivar > cancelar el diálogo no cambia nada
+     OK   UsuariosPage > contraseña > valida longitud y cambia la contraseña
+     OK   UsuariosPage > contraseña > alerta si el backend falla y cancela
+     OK   UsuariosPage > permisos por rol > coordinador/técnico sin permisos ven solo badges (sin acciones)
+     OK   UsuariosPage > permisos por rol > superadmin puede gestionar a un admin
+     OK   UsuariosPage > permisos por rol > sin usuario autenticado no hay acciones
+  [src/pages/admin/maintenance/maintenance.test.tsx]  (25)
+     OK   MantenimientosPage > lista registros (equipo con etiqueta, programado, orden de trabajo)
+     OK   MantenimientosPage > estado vacío con servicios auxiliares caídos
+     OK   MantenimientosPage > muestra el error de carga
+     OK   MantenimientosPage > filtra por tipo, técnico y equipo
+     OK   MantenimientosPage > el botón 'Nuevo mantenimiento' navega a equipos
+     OK   MantenimientosPage > pagina
+     OK   MantenimientosPage > creación por query params > ?equipment=ID abre el formulario con el equipo y crea (con PDF)
+     OK   MantenimientosPage > creación por query params > crear sin PDF usa create(); equipment inválido se ignora; sin permiso no abre
+     OK   MantenimientosPage > creación por query params > equipment inválido y rol sin permiso no abren el modal
+     OK   MantenimientosPage > creación por query params > ?scheduling=ID precarga el formulario desde el agendamiento
+     OK   MantenimientosPage > creación por query params > ?scheduling=ID ya cumplido o inexistente avisa
+     OK   MantenimientosPage > creación por query params > ?scheduling no numérico se ignora
+     OK   MantenimientosPage > creación por query params > sin lista de técnicos permite escribir el ID
+     OK   MantenimientosPage > creación por query params > cancelar limpia los parámetros
+     OK   MantenimientosPage > creación por query params > falla al crear => alerta
+     OK   MantenimientosPage > sin permiso de creación no muestra el botón
+     OK   useMantenimientos (acciones no expuestas por la tabla) > openCreate toma el primer equipo; openEdit carga el registro; closeModal limpia
+     OK   useMantenimientos (acciones no expuestas por la tabla) > submit en edición llama a update, recarga y cierra
+     OK   useMantenimientos (acciones no expuestas por la tabla) > submit con error alerta y conserva el modal
+     OK   useMantenimientos (acciones no expuestas por la tabla) > confirmDelete elimina; sin objetivo no hace nada; error alerta
+     OK   useMantenimientos (acciones no expuestas por la tabla) > permisos por rol y etiqueta de equipo desconocido
+     OK   MaintenanceRow / MaintenanceFormModal (componentes directos) > la fila con acciones habilitadas muestra Editar/Eliminar y la orden
+     OK   MaintenanceRow / MaintenanceFormModal (componentes directos) > la fila sin permisos oculta botones
+     OK   MaintenanceRow / MaintenanceFormModal (componentes directos) > modal en edición: agendamientos vacíos deshabilitados, ayuda según rol y avisos de equipos
+     OK   MaintenanceRow / MaintenanceFormModal (componentes directos) > modal: cambiar equipo/tipo/observaciones/agendamiento y el id de técnico
+  [src/pages/admin/failures/failures.test.tsx]  (16)
+     OK   FailureHeader > cambia el texto según rol
+     OK   FallasPage > lista reportes con etiqueta de equipo y estado
+     OK   FallasPage > etiqueta de equipo desconocido
+     OK   FallasPage > estado vacío y error de carga
+     OK   FallasPage > tolera fallos de equipos, opciones y sedes
+     OK   FallasPage > aplica filtros (severidad, estado, sede, servicio, búsqueda)
+     OK   FallasPage > pagina
+     OK   FallasPage > crea un reporte
+     OK   FallasPage > muestra el aviso cuando no hay equipos y alerta si falla crear
+     OK   FallasPage > edita un reporte
+     OK   FallasPage > elimina con confirmación y reporta error
+     OK   FallasPage > resuelve con notas; solo los abiertos tienen botón Resolver
+     OK   FallasPage > resolver sin notas envía undefined; error muestra alerta; cancelar cierra
+     OK   FallasPage > el ingeniero vuelve al dashboard tras resolver
+     OK   FallasPage > técnico: solo crea; sin sesión no hay acciones
+     OK   FallasPage > rol sin permisos no muestra columna de acciones
+  [src/components/ui/ui.test.tsx]  (40)
+     OK   Badge > renderiza hijos, tono y clase extra
+     OK   Badge > usa tono neutral por defecto
+     OK   Card / CardHeader > aplica padding y propaga props
+     OK   Card / CardHeader > CardHeader muestra título, subtítulo y acción; variante compacta
+     OK   Form > renderiza un contenedor
+     OK   IconHint > muestra la etiqueta al hover/focus y la oculta al salir
+     OK   Input > asocia label, muestra error sobre hint y reenvía el ref
+     OK   Input > sin label ni mensajes no renderiza extras; respeta id
+     OK   Input > alterna visibilidad de contraseña
+     OK   Select > renderiza opciones, placeholder y dispara onChange
+     OK   Select > muestra error
+     OK   Select > sin placeholder ni label
+     OK   Tabs > marca la pestaña activa y notifica cambios
+     OK   ThemeToggle > alterna entre modo claro y oscuro
+     OK   Modal > no renderiza cerrado; cierra con X, backdrop y Escape
+     OK   Modal > Escape solo cierra el modal superior y respeta tamaños
+     OK   Modal > tamaño sm
+     OK   Modal > tamaño md
+     OK   Modal > tamaño lg
+     OK   ConfirmDialog > confirma y cancela
+     OK   ConfirmDialog > textos personalizados, sin descripción y en estado loading
+     OK   Toast / ToastContainer > se autodescarta tras la duración y permite cerrar manualmente
+     OK   Toast / ToastContainer > usa 6000 ms por defecto y omite body/meta
+     OK   Toast / ToastContainer > el contenedor no renderiza sin toasts y los lista en un portal
+     OK   Combobox > filtra por inicio de texto (sin tildes) o hint y selecciona con click
+     OK   Combobox > muestra 'Sin coincidencias'
+     OK   Combobox > navega con el teclado: flechas, Enter y Escape
+     OK   Combobox > limpia con el botón y al vaciar el texto
+     OK   Combobox > sincroniza el texto con value controlado
+     OK   Combobox > autoFocus no abre la lista hasta interactuar; click fuera cierra
+     OK   Combobox > deshabilitado
+     OK   Combobox > Enter sin lista abierta no selecciona
+     OK   TechnicianSelect > lista, filtra y selecciona
+     OK   TechnicianSelect > sin coincidencias
+     OK   TechnicianSelect > navegación con teclado
+     OK   TechnicianSelect > Enter con el menú cerrado lo abre; Enter sin resultados no hace nada
+     OK   TechnicianSelect > muestra el seleccionado, permite limpiarlo y reabrir
+     OK   TechnicianSelect > al hacer click en el seleccionado abre la búsqueda
+     OK   TechnicianSelect > click fuera cierra el menú; el chevron lo alterna; hover cambia el resaltado
+     OK   TechnicianSelect > valor que no existe en la lista se trata como sin selección
+  [src/components/layout/layout.test.tsx]  (18)
+     OK   Footer > muestra contacto, soporte y año vigente
+     OK   Header > anónimo: botón de login y toggle de tema
+     OK   Header > autenticado fuera del panel muestra nombre, rol e 'Ir al panel'
+     OK   Header > dentro del panel oculta 'Ir al panel'; con onToggleSidebar muestra el menú
+     OK   Sidebar > enlaces visibles para superadmin
+     OK   Sidebar > enlaces visibles para admin
+     OK   Sidebar > enlaces visibles para coordinador
+     OK   Sidebar > enlaces visibles para ingeniero
+     OK   Sidebar > enlaces visibles para tecnico
+     OK   Sidebar > enlaces visibles para usuario
+     OK   Sidebar > sin sesión no muestra enlaces
+     OK   Layouts > MainLayout renderiza header, outlet y footer
+     OK   Layouts > AdminLayout renderiza sidebar + outlet y aísla errores en el boundary
+     OK   ProtectedRoute > muestra spinner mientras carga
+     OK   ProtectedRoute > redirige al login sin sesión
+     OK   ProtectedRoute > permite el acceso autenticado sin restricción de roles
+     OK   ProtectedRoute > permite el acceso cuando el rol está permitido
+     OK   ProtectedRoute > redirige al panel cuando el rol no está permitido
+  [src/components/ui/Button.test.tsx]  (4)
+     OK   Button > renders its children
+     OK   Button > calls onClick when clicked
+     OK   Button > disables the button and hides onClick interaction while loading
+     OK   Button > respects an explicit disabled prop even without loading
+  [src/context/context.test.tsx]  (15)
+     OK   AuthContext > useAuth fuera del provider lanza
+     OK   AuthContext > hidrata la sesión desde /users/me/ y la cachea
+     OK   AuthContext > sin sesión limpia la caché y deja usuario nulo
+     OK   AuthContext > login, refreshUser y logout
+     OK   AuthContext > ignora la respuesta si se desmonta antes de resolver (éxito y error)
+     OK   ThemeContext > useTheme fuera del provider lanza
+     OK   ThemeContext > usa el tema guardado y lo alterna persistiendo
+     OK   ThemeContext > sin valor guardado respeta prefers-color-scheme
+     OK   ThemeContext > cae a light si matchMedia lanza o no hay preferencia
+     OK   ThemeContext > tolera localStorage que lanza (lectura y escritura)
+     OK   NotificationContext > useNotifications fuera del provider lanza
+     OK   NotificationContext > conecta el socket con sesión y publica toasts por tipo de evento
+     OK   NotificationContext > limita la cola a 5 toasts y permite descartar
+     OK   NotificationContext > sin sesión desconecta el socket y al desmontar también
+     OK   NotificationContext > genId cae a Date.now si no existe crypto.randomUUID
+  [src/components/ErrorBoundary.test.tsx]  (4)
+     OK   ErrorBoundary > renders its children when nothing throws
+     OK   ErrorBoundary > shows a recoverable message instead of a blank screen when a child throws
+     OK   ErrorBoundary > retries the render when the user clicks 'Reintentar' after the cause is gone
+     OK   ErrorBoundary > clears the error on its own when resetKey changes (route navigation)
+  [src/lib/api.interceptors.test.ts]  (16)
+     OK   userCache > set/get/clear
+     OK   userCache > get devuelve null si el JSON está corrupto
+     OK   interceptor CSRF > adjunta X-CSRFToken en métodos mutadores cuando hay cookie
+     OK   interceptor CSRF > no lo adjunta en GET ni sin cookie
+     OK   interceptor de respuesta (refresh 401) > propaga errores que no son 401
+     OK   interceptor de respuesta (refresh 401) > no intenta refrescar en endpoints /auth/token/
+     OK   interceptor de respuesta (refresh 401) > refresca la sesión y reintenta la petición original
+     OK   interceptor de respuesta (refresh 401) > si el refresh falla en zona privada limpia caché y redirige con next
+     OK   interceptor de respuesta (refresh 401) > si el refresh falla en zona pública no redirige
+     OK   interceptor de respuesta (refresh 401) > peticiones concurrentes esperan al mismo refresh (éxito)
+     OK   interceptor de respuesta (refresh 401) > peticiones concurrentes se rechazan si el refresh falla
+     OK   getApiErrorMessage (ramas adicionales) > lee content-type vía headers.get y en mayúsculas
+     OK   getApiErrorMessage (ramas adicionales) > campo string en el primer valor
+     OK   getApiErrorMessage (ramas adicionales) > cuerpo vacío usa el mensaje del error
+     OK   getApiErrorMessage (ramas adicionales) > error no axios sin mensaje usa fallback
+     OK   getApiErrorMessage (ramas adicionales) > cuerpo HTML vía '<!doctype' con espacios
+  [src/utils/utils.test.ts]  (33)
+     OK   constantes de utilidades > expone tamaños de página y formularios vacíos
+     OK   constantes de utilidades > fechas de hoy tienen el formato esperado
+     OK   equipment.names.utils > startsWithLetter ignora tildes y mayúsculas
+     OK   equipment.names.utils > uniqueNames deduplica, recorta y ordena en español
+     OK   equipment.names.utils > downloadTextFile crea un enlace temporal y lo libera
+     OK   ficha.utils > formatHours cubre minutos, horas y días
+     OK   ficha.utils > etiquetas y tonos de mantenimientos programados
+     OK   maintenance.utils.labelForTechnician > prioriza técnico, luego ingeniero, luego texto libre, luego guion
+     OK   scheduling.utils > scheduleEstado
+     OK   scheduling.utils > formatDateTime
+     OK   scheduling.utils > etiquetas de responsable y solicitante
+     OK   dashboard.utils > catálogos de etiquetas/colores
+     OK   dashboard.utils > formatCost
+     OK   dashboard.utils > formatHours del dashboard
+     OK   dashboard.utils > formatWeekday
+     OK   dashboard.utils > dateKey / inDateRange / grainKey
+     OK   dashboard.utils > grainLabel / MonthLabel
+     OK   dashboard.utils > buildcoordinadorChartData > agrupa por día rellenando el rango
+     OK   dashboard.utils > buildcoordinadorChartData > invierte un rango desordenado
+     OK   dashboard.utils > buildcoordinadorChartData > agrupa por mes y por año
+     OK   dashboard.utils > buildcoordinadorChartData > sin rango solo crea buckets con datos
+     OK   dashboard.utils > buildcoordinadorChartData > filtra días vacíos cuando el rango diario supera 45 días
+     OK   dashboard.utils > buildcoordinadorChartData > rango invertido con from/to vacío usa hoy
+     OK   dashboard.utils > buildadministradorChartData > agrupa por día rellenando el rango
+     OK   dashboard.utils > buildadministradorChartData > invierte un rango desordenado
+     OK   dashboard.utils > buildadministradorChartData > agrupa por mes y por año
+     OK   dashboard.utils > buildadministradorChartData > sin rango solo crea buckets con datos
+     OK   dashboard.utils > buildadministradorChartData > filtra días vacíos cuando el rango diario supera 45 días
+     OK   dashboard.utils > buildadministradorChartData > rango invertido con from/to vacío usa hoy
+     OK   dashboard.utils > periodKeys con inicio posterior al fin devuelve vacío (vía builder)
+     OK   equipment.form.utils > equipmentToForm convierte números a string y recorta fechas
+     OK   equipment.form.utils > equipmentToForm tolera nulos
+     OK   equipment.form.utils > formToPayload convierte cadenas vacías en undefined y números
+  [src/lib/websocket.test.ts]  (15)
+     OK   notificationsSocket > connect abre un socket contra el origen de la pestaña
+     OK   notificationsSocket > usa VITE_WS_BASE_URL salvo que apunte a :8000
+     OK   notificationsSocket > no abre otra conexión si ya hay una viva
+     OK   notificationsSocket > reenvía mensajes JSON válidos a los handlers y tolera basura
+     OK   notificationsSocket > un handler que lanza no impide a los demás
+     OK   notificationsSocket > onopen cierra sockets obsoletos
+     OK   notificationsSocket > onopen con socket reemplazado cierra con 'stale'
+     OK   notificationsSocket > onerror solo deja rastro
+     OK   notificationsSocket > reconecta con backoff tras un cierre inesperado y reinicia al abrir
+     OK   notificationsSocket > topa el backoff en 30 s
+     OK   notificationsSocket > no reintenta con código 4401
+     OK   notificationsSocket > no reintenta tras disconnect() y cierra solo sockets abiertos
+     OK   notificationsSocket > disconnect cancela un reconnect pendiente
+     OK   notificationsSocket > onclose marcado como intencional no programa reconexión
+     OK   notificationsSocket > scheduleReconnect no hace nada si ya no está conectado
+  [src/services/services.test.ts]  (104)
+     OK   branches service > list desenvuelve resultados paginados
+     OK   branches service > list acepta respuesta sin paginar (array)
+     OK   branches service > listPaginated devuelve el bloque paginado tal cual
+     OK   branches service > listPaginated simula un bloque unico si el backend devuelve array
+     OK   branches service > listAll recorre todas las paginas
+     OK   branches service > listAll devuelve el array directo si no hay paginacion
+     OK   branches service > retrieve consulta el detalle
+     OK   branches service > create hace POST y retorna el recurso
+     OK   branches service > update hace PATCH
+     OK   branches service > remove hace DELETE
+     OK   brands service > list desenvuelve resultados paginados
+     OK   brands service > list acepta respuesta sin paginar (array)
+     OK   brands service > listPaginated devuelve el bloque paginado tal cual
+     OK   brands service > listPaginated simula un bloque unico si el backend devuelve array
+     OK   brands service > listAll recorre todas las paginas
+     OK   brands service > listAll devuelve el array directo si no hay paginacion
+     OK   brands service > retrieve consulta el detalle
+     OK   brands service > create hace POST y retorna el recurso
+     OK   brands service > update hace PATCH
+     OK   brands service > remove hace DELETE
+     OK   models service > list desenvuelve resultados paginados
+     OK   models service > list acepta respuesta sin paginar (array)
+     OK   models service > listPaginated devuelve el bloque paginado tal cual
+     OK   models service > listPaginated simula un bloque unico si el backend devuelve array
+     OK   models service > listAll recorre todas las paginas
+     OK   models service > listAll devuelve el array directo si no hay paginacion
+     OK   models service > retrieve consulta el detalle
+     OK   models service > create hace POST y retorna el recurso
+     OK   models service > update hace PATCH
+     OK   models service > remove hace DELETE
+     OK   users service > list desenvuelve resultados paginados
+     OK   users service > list acepta respuesta sin paginar (array)
+     OK   users service > listPaginated devuelve el bloque paginado tal cual
+     OK   users service > listPaginated simula un bloque unico si el backend devuelve array
+     OK   users service > listAll recorre todas las paginas
+     OK   users service > listAll devuelve el array directo si no hay paginacion
+     OK   users service > retrieve consulta el detalle
+     OK   users service > create hace POST y retorna el recurso
+     OK   users service > update hace PATCH
+     OK   users service > remove hace DELETE
+     OK   equipment service > list desenvuelve resultados paginados
+     OK   equipment service > list acepta respuesta sin paginar (array)
+     OK   equipment service > listPaginated devuelve el bloque paginado tal cual
+     OK   equipment service > listPaginated simula un bloque unico si el backend devuelve array
+     OK   equipment service > listAll recorre todas las paginas
+     OK   equipment service > listAll devuelve el array directo si no hay paginacion
+     OK   equipment service > retrieve consulta el detalle
+     OK   equipment service > create hace POST y retorna el recurso
+     OK   equipment service > update hace PATCH
+     OK   equipment service > remove hace DELETE
+     OK   failures service > list desenvuelve resultados paginados
+     OK   failures service > list acepta respuesta sin paginar (array)
+     OK   failures service > listPaginated devuelve el bloque paginado tal cual
+     OK   failures service > listPaginated simula un bloque unico si el backend devuelve array
+     OK   failures service > retrieve consulta el detalle
+     OK   failures service > create hace POST y retorna el recurso
+     OK   failures service > update hace PATCH
+     OK   failures service > remove hace DELETE
+     OK   maintenance service > list desenvuelve resultados paginados
+     OK   maintenance service > list acepta respuesta sin paginar (array)
+     OK   maintenance service > listPaginated devuelve el bloque paginado tal cual
+     OK   maintenance service > listPaginated simula un bloque unico si el backend devuelve array
+     OK   maintenance service > listAll recorre todas las paginas
+     OK   maintenance service > listAll devuelve el array directo si no hay paginacion
+     OK   maintenance service > retrieve consulta el detalle
+     OK   maintenance service > create hace POST y retorna el recurso
+     OK   maintenance service > update hace PATCH
+     OK   maintenance service > remove hace DELETE
+     OK   scheduling service > list desenvuelve resultados paginados
+     OK   scheduling service > list acepta respuesta sin paginar (array)
+     OK   scheduling service > listPaginated devuelve el bloque paginado tal cual
+     OK   scheduling service > listPaginated simula un bloque unico si el backend devuelve array
+     OK   scheduling service > retrieve consulta el detalle
+     OK   scheduling service > create hace POST y retorna el recurso
+     OK   scheduling service > update hace PATCH
+     OK   scheduling service > remove hace DELETE
+     OK   workorders service > list desenvuelve resultados paginados
+     OK   workorders service > list acepta respuesta sin paginar (array)
+     OK   workorders service > listPaginated devuelve el bloque paginado tal cual
+     OK   workorders service > listPaginated simula un bloque unico si el backend devuelve array
+     OK   workorders service > listAll recorre todas las paginas
+     OK   workorders service > listAll devuelve el array directo si no hay paginacion
+     OK   workorders service > create hace POST y retorna el recurso
+     OK   workorders service > update hace PATCH
+     OK   workorders service > remove hace DELETE
+     OK   authService > login envia credenciales
+     OK   authService > me retorna el usuario
+     OK   authService > logout ignora errores de red
+     OK   dashboardService > summary
+     OK   equipmentService (especificos) > byAssetTag codifica la placa
+     OK   equipmentService (especificos) > regenerateQr
+     OK   equipmentService (especificos) > updateImage envia FormData multipart
+     OK   equipmentService (especificos) > regenerateQrAll con y sin missing
+     OK   equipmentService (especificos) > names
+     OK   maintenanceService.createWithFile > arma el FormData omitiendo null/undefined y adjunta el PDF
+     OK   failuresService (especificos) > resolve con y sin notas
+     OK   schedulingService (especificos) > complete y notify
+     OK   usersService.setPassword > hace POST a set_password
+     OK   workOrdersService (especificos) > details y complete
+     OK   workOrdersService (especificos) > sub-recurso sparePart: create/update/remove
+     OK   workOrdersService (especificos) > sub-recurso measurement: create/update/remove
+     OK   workOrdersService (especificos) > sub-recurso evidence: create/update/remove
+     OK   workOrdersService (especificos) > sub-recurso signature: create/update/remove
+     OK   workOrdersService (especificos) > sub-recurso cost: create/update/remove
+  [src/lib/api.test.ts]  (9)
+     OK   getApiErrorMessage > returns the string body verbatim
+     OK   getApiErrorMessage > ignores Django HTML/CSS 500 dumps and uses the fallback
+     OK   getApiErrorMessage > prefers DRF's `detail` field when present
+     OK   getApiErrorMessage > falls back to the first field error array (DRF validation shape)
+     OK   getApiErrorMessage > falls back to the provided default for a non-axios error
+     OK   getApiErrorMessage > uses the custom fallback message when nothing else matches
+     OK   getApiFieldErrors > maps a DRF 400 validation body to a flat { field: message } object
+     OK   getApiFieldErrors > puts non_field_errors and detail under the empty key
+     OK   getApiFieldErrors > returns {} for non-400 responses and non-axios errors
+  [src/lib/misc.test.ts]  (11)
+     OK   featureFlags > el registro público está deshabilitado
+     OK   resolveMediaUrl > devuelve null para vacío
+     OK   resolveMediaUrl > reescribe URLs absolutas a /media/ same-origin conservando query
+     OK   resolveMediaUrl > normaliza rutas /media sin slash final y media/ relativa
+     OK   resolveMediaUrl > deja intactas las URL que no son media
+     OK   resolveMediaUrl > usa el fallback cuando URL() lanza
+     OK   lib/users > fullNameOf: nombre normal, rol partido y username
+     OK   lib/users > assignedUserName / FirstName / RoleLabel
+     OK   lib/users > assignmentPayload enruta por rol
+     OK   downloadEquipmentInventory > genera un xlsx con una fila y nombre basado en la placa
+     OK   downloadEquipmentInventory > usa nombre genérico con varias filas y nombra columnas más allá de Z
+  [src/lib/permissions.test.ts]  (17)
+     OK   can > returns false when role is undefined
+     OK   can > superadmin can do everything listed for every resource
+     OK   can > tecnico cannot delete equipment (no delete listed for that resource)
+     OK   can > tecnico can view equipment
+     OK   can > tecnico can create failure reports but not resolve them
+     OK   can > tecnico can view and create scheduling requests
+     OK   can > usuario can create solicitudes but not failures
+     OK   can > returns false for a resource not present in the role's matrix entry
+     OK   can > coordinador can create/edit equipment but not delete it
+     OK   can > ingeniero can view and edit work orders but not delete them
+     OK   can > ingeniero can view solicitudes but not create them
+     OK   canAssignRole > returns false when actorRole is undefined
+     OK   canAssignRole > superadmin can assign clinic roles but not another superadmin
+     OK   canAssignRole > admin can assign coordinador/ingeniero/tecnico
+     OK   canAssignRole > admin cannot assign admin or superadmin
+     OK   canAssignRole > roles below admin cannot assign anyone
+     OK   panelHome > sends every role to the dashboard
+  [src/lib/users.test.ts]  (3)
+     OK   fullNameOf > joins first and last name
+     OK   fullNameOf > does not split the role label across first/last name
+     OK   fullNameOf > falls back to username when names are empty
+  [src/lib/cn.test.ts]  (4)
+     OK   cn > joins multiple string classes with a space
+     OK   cn > drops falsy values (undefined, null, false, empty string)
+     OK   cn > supports the conditional object form
+     OK   cn > returns an empty string when nothing is truthy
+
+6. LINEAS / MODULOS NO CUBIERTOS (pendientes)
+====================================================================================================
+  BACKEND (697 sentencias):
+   - Comandos de importacion (CLI de carga masiva desde CSV/Excel), ~480 sentencias, 0 %:
+       equipment import_equipment + regenerate_qr, failures import_failures, maintenance import_maintenance,
+       workorders import_workorders; parcialmente: scheduling import_schedules (84 %), users clean_users (85 %) / import_users (69 %)
+   - equipment/tasks.py (34 %): tarea Celery check_equipment_expiry
+   - config/settings/prod.py (0 %), config/urls.py (70 %), settings/base.py ramas de entorno
+   - Ramas menores en managers/filters/serializers/signals de scheduling, maintenance, failures, dashboard (ver 4b)
+  FRONTEND:
+   - App.tsx y main.tsx (enrutado/arranque)
+   - pages/admin/equipment/** (EquiposPage, EquipoFicha, Ficha*, SedesPage, EtiquetasQrPage, Equipment*Section, catalog/**, workorders/**)
+   - pages/admin/scheduling/** (AgendamientosPage y componentes)
+   - pages/admin/dashboard/** (Dashboard, AdminOverview, AreaOps, EngineerTasks, widgets)
+   - types/** excluido a proposito (solo declaraciones TypeScript)
+
+7. HALLAZGOS / DEFECTOS DETECTADOS POR QA
+====================================================================================================
+  H-01 [Media]  Frontend/Mantenimientos: MaintenanceTable.tsx fija 'showActions = false'. Editar y eliminar registros de
+                mantenimiento son INALCANZABLES desde la UI (codigo muerto: useMantenimientos.openEdit/confirmDelete y
+                MaintenanceFormModal en modo edicion). El boton 'Nuevo mantenimiento' solo redirige a /admin/equipos.
+  H-02 [Media]  Frontend/Usuarios: el boton 'Nuevo usuario' vive dentro de CADA fila (UserRow). Si la lista esta vacia
+                (o el filtro no devuelve resultados) no existe forma de crear un usuario. Lo mismo ocurre en Fallas
+                ('Nuevo reporte' esta en FailureRow): con 0 reportes no se puede crear el primero.
+  H-03 [Baja]   Frontend/lib/media.ts: resolveMediaUrl('http://x/mediafile.png') devuelve '/mediafile.png' porque el
+                prefijo '/media' sin barra final coincide con cualquier ruta que empiece por 'media...'.
+  H-04 [Baja]   Backend/equipment/models.py Equipment.estado_garantia(): devuelve None para vencimientos entre 11 y 29 dias
+                y > 30 dias; la rama '== 30' solo se cumple en un dia exacto (probable error de logica, deberia ser <= 30).
+                Ademas mezcla DateTimeField con timezone.now() (la fecha se llama 'warranty_end_date').
+  H-05 [Baja]   Backend/users/views.py: mensaje de error con errata: 'Solo un superadministrador puee modificar...'.
+  H-06 [Info]   Frontend/RegistroPage: el envio es un MOCK (setTimeout 800 ms), no llama a ningun endpoint. El registro
+                publico esta ademas deshabilitado por bandera (PUBLIC_REGISTRATION_ENABLED=false).
+  H-07 [Info]   Frontend/lib/users.fullNameOf: si nombre+apellido concatenados equivalen al rol (p.ej. 'Tec'+'Nico')
+                se muestra la etiqueta del rol ('Usuario operativo') en vez del nombre (comportamiento intencional pero sorpresivo).
+  H-09 [Info]   Prueba failures.test.tsx > FallasPage > pagina hace timeout en corridas completas con la maquina cargada; aislada pasa 16/16.
+  H-08 [Info]   Prueba realtime/tests/test_notifications.py sensible a carga: 2 pruebas hacen timeout si el equipo esta saturado.
+
+8. RECOMENDACIONES
+----------------------------------------------------------------------------------------------------
+  1. Completar los modulos de la seccion 6 (frontend: equipos, agendamientos, dashboard; backend: comandos de importacion).
+  2. Anadir 'pytest --cov --cov-fail-under' y 'vitest --coverage' con umbrales en CI para evitar regresiones.
+  3. Corregir H-01/H-02 (decision de producto) y H-04 (logica de garantia).
+  4. Fijar tiempos de espera mayores o usar marcadores para las pruebas WebSocket en CI compartido.
+
+9. PRUEBAS FUNCIONALES DE SEGURIDAD Y MFA (segunda ronda)
+====================================================================================================
+Ultima corrida completa del backend: 686 pasaron, 4 omitidas, 0 fallidas (cobertura 86 %). Pruebas nuevas de esta ronda en backend: 114.
+Frontend: 382 pruebas (6 nuevas: cierre por inactividad x3, login 'Acceso no autorizado' x2, login con MFA). Ultima corrida: 381 OK + 1 fallo por carga.
+Las 4 omitidas son rutas que no existen con ese nombre (maintenance:maintenancerecord-list, scheduling:maintenanceschedule-list).
+
+9.1 Hallazgos y verificaciones
+----------------------------------------------------------------------------------------------------
+  * Inyeccion SQL: 8 cargas (OR 1=1, DROP TABLE, UNION SELECT, pg_sleep, etc.) probadas en login, search, ordering,
+    filtros y rutas con id. Resultado: NINGUNA filtra datos ni altera la base. El codigo usa solo ORM (sin SQL crudo).
+  * XSS: la API responde application/json con X-Content-Type-Options: nosniff; las ventanas de impresion de QR escapan el HTML.
+  * Acceso sin credenciales / token falso: 401 en todas las rutas protegidas probadas.
+  * Escalada de roles: tecnico no crea usuarios, admin no crea superadmin, nadie se auto-promueve.
+  * Se detecto y corrigio: faltaban cabeceras Permissions-Policy / Referrer-Policy / Cache-Control: no-store en la API.
+
+9.2 Cambios de seguridad implementados
+----------------------------------------------------------------------------------------------------
+  - common/middleware.py: Permissions-Policy, Referrer-Policy, Cross-Origin-Opener-Policy y no-store en /api/.
+  - Limite de login 500/min -> 20/min; contrasena minima 8 -> 10 caracteres.
+  - Login: usuario NO registrado -> 401 'Acceso no autorizado' (consola del servidor: 'Permiso no autorizado ...'; consola del
+    navegador: 'Permiso no autorizado'). Usuarios registrados siempre pueden entrar (incognito incluido).
+  - MFA TOTP obligatorio para todos los roles (users/mfa.py, RFC 6238, sin dependencias externas) y dispositivos registrados
+    (modelo TrustedDevice, cookie httpOnly 'device_token', solo se guarda el hash). Navegador nuevo/incognito: pide codigo y
+    queda registrado. 5 codigos invalidos -> bloqueo 15 min. Restablecer MFA: POST /users/<id>/reset_mfa/ (admin).
+  - Cierre de sesion por inactividad (15 min) en el frontend (useIdleLogout).
+  - Login: cualquier fallo 401 (usuario inexistente o clave incorrecta) muestra 'Acceso no autorizado' (evita enumerar usuarios).
+  - Login: el QR de Google Authenticator se muestra en un MODAL (Configura la verificacion en dos pasos) con clave manual y campo de codigo.
+  - Migracion users.0006_mfa_trusted_devices (debe aplicarse: python manage.py migrate).
+  - Interruptor MFA_REQUIRED (por defecto activo; las pruebas lo desactivan salvo test_mfa.py).
+
+9.3 Incidente detectado durante la puesta en marcha
+----------------------------------------------------------------------------------------------------
+  Tras implementar MFA, el login devolvia 500 para TODOS los usuarios en el entorno Docker porque la migracion 0006 no estaba
+  aplicada (columnas mfa_enabled/totp_secret inexistentes). Se aplico la migracion en el contenedor 'web' y se verifico 401 para
+  usuario inexistente. Leccion: la migracion es obligatoria al desplegar este cambio.
+
+9.4 Riesgos y pendientes
+----------------------------------------------------------------------------------------------------
+  - Un mensaje distinto para usuario inexistente permite enumerar usuarios; el limite de 20/min lo mitiga. Pendiente: bloqueo por IP.
+  - La app movil (EbMobile) debe enviar el campo 'otp' en /auth/token/ (el endpoint clasico tambien exige MFA).
+  - Todos los usuarios existentes deberan configurar el MFA en su proximo inicio de sesion.
+  - No hay aun pantalla en el perfil para ver/revocar dispositivos (solo existe la API de restablecimiento).
+
+9.5 Detalle de pruebas nuevas (backend)
+----------------------------------------------------------------------------------------------------
+  [users/tests/test_mfa.py]  (16)
+     OK   TestTotp::test_vector_rfc6238
+     OK   TestTotp::test_verify_rechaza_basura
+     OK   TestEnrolamiento::test_primer_login_pide_configurar_y_no_da_sesion
+     OK   TestEnrolamiento::test_confirmar_codigo_activa_mfa_y_registra_dispositivo
+     OK   TestEnrolamiento::test_codigo_incorrecto_en_enrolamiento
+     OK   TestDispositivos::test_dispositivo_registrado_entra_sin_codigo
+     OK   TestDispositivos::test_navegador_nuevo_o_incognito_pide_codigo_pero_registrado_puede_entrar
+     OK   TestDispositivos::test_dispositivo_revocado_vuelve_a_pedir_codigo
+     OK   TestDispositivos::test_cookie_de_dispositivo_ajena_no_sirve
+     OK   TestDispositivos::test_clave_incorrecta_no_revela_estado_de_mfa
+     OK   TestFuerzaBruta::test_bloqueo_tras_5_codigos_invalidos
+     OK   TestClasicoYReset::test_endpoint_clasico_tambien_exige_codigo_y_no_registra_dispositivo
+     OK   TestClasicoYReset::test_secreto_nunca_se_expone_en_la_api
+     OK   TestClasicoYReset::test_admin_restablece_mfa
+     OK   TestClasicoYReset::test_admin_no_restablece_mfa_de_superadmin_y_tecnico_no_puede
+     OK   TestClasicoYReset::test_mfa_desactivado_por_configuracion
+  [users/tests/test_security_hardening.py]  (98)
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[users:user-list]
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[users:user-me]
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[branches:branch-list]
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[catalog:brand-list]
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[catalog:equipment-model-list]
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[equipment:equipment-list]
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[equipment:equipment-names]
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[equipment:equipment-work-order-list]
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[equipment:equipment-attachment-list]
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[equipment:equipment-certificate-list]
+     OMIT  TestAnonymousAccess::test_sin_credenciales_devuelve_401[maintenance:maintenancerecord-list]
+     OMIT  TestAnonymousAccess::test_sin_credenciales_devuelve_401[scheduling:maintenanceschedule-list]
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[failures:failure-list]
+     OK   TestAnonymousAccess::test_sin_credenciales_devuelve_401[dashboard:summary]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[users:user-list]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[users:user-me]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[branches:branch-list]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[catalog:brand-list]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[catalog:equipment-model-list]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[equipment:equipment-list]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[equipment:equipment-names]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[equipment:equipment-work-order-list]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[equipment:equipment-attachment-list]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[equipment:equipment-certificate-list]
+     OMIT  TestAnonymousAccess::test_token_falso_devuelve_401[maintenance:maintenancerecord-list]
+     OMIT  TestAnonymousAccess::test_token_falso_devuelve_401[scheduling:maintenanceschedule-list]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[failures:failure-list]
+     OK   TestAnonymousAccess::test_token_falso_devuelve_401[dashboard:summary]
+     OK   TestAnonymousAccess::test_escritura_anonima_rechazada
+     OK   TestAnonymousAccess::test_usuario_inactivo_no_puede_autenticarse
+     OK   TestSqlInjection::test_login_no_es_inyectable[' OR '1'='1]
+     OK   TestSqlInjection::test_login_no_es_inyectable[' OR 1=1--]
+     OK   TestSqlInjection::test_login_no_es_inyectable['; DROP TABLE users_user;--]
+     OK   TestSqlInjection::test_login_no_es_inyectable[" OR ""="]
+     OK   TestSqlInjection::test_login_no_es_inyectable[1; SELECT pg_sleep(5)--]
+     OK   TestSqlInjection::test_login_no_es_inyectable[' UNION SELECT NULL,NULL,NULL--]
+     OK   TestSqlInjection::test_login_no_es_inyectable[%27%20OR%201%3D1]
+     OK   TestSqlInjection::test_login_no_es_inyectable[\\'; DELETE FROM equipment_equipment;--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[users:user-list-' OR '1'='1]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[users:user-list-' OR 1=1--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[users:user-list-'; DROP TABLE users_user;--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[users:user-list-" OR ""="]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[users:user-list-1; SELECT pg_sleep(5)--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[users:user-list-' UNION SELECT NULL,NULL,NULL--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[users:user-list-%27%20OR%201%3D1]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[users:user-list-\\'; DELETE FROM equipment_equipment;--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[equipment:equipment-list-' OR '1'='1]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[equipment:equipment-list-' OR 1=1--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[equipment:equipment-list-'; DROP TABLE users_user;--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[equipment:equipment-list-" OR ""="]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[equipment:equipment-list-1; SELECT pg_sleep(5)--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[equipment:equipment-list-' UNION SELECT NULL,NULL,NULL--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[equipment:equipment-list-%27%20OR%201%3D1]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[equipment:equipment-list-\\'; DELETE FROM equipment_equipment;--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[branches:branch-list-' OR '1'='1]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[branches:branch-list-' OR 1=1--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[branches:branch-list-'; DROP TABLE users_user;--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[branches:branch-list-" OR ""="]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[branches:branch-list-1; SELECT pg_sleep(5)--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[branches:branch-list-' UNION SELECT NULL,NULL,NULL--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[branches:branch-list-%27%20OR%201%3D1]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[branches:branch-list-\\'; DELETE FROM equipment_equipment;--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[failures:failure-list-' OR '1'='1]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[failures:failure-list-' OR 1=1--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[failures:failure-list-'; DROP TABLE users_user;--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[failures:failure-list-" OR ""="]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[failures:failure-list-1; SELECT pg_sleep(5)--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[failures:failure-list-' UNION SELECT NULL,NULL,NULL--]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[failures:failure-list-%27%20OR%201%3D1]
+     OK   TestSqlInjection::test_search_y_ordering_no_rompen_ni_filtran[failures:failure-list-\\'; DELETE FROM equipment_equipment;--]
+     OK   TestSqlInjection::test_id_en_ruta_con_payload_devuelve_404[' OR '1'='1]
+     OK   TestSqlInjection::test_id_en_ruta_con_payload_devuelve_404[' OR 1=1--]
+     OK   TestSqlInjection::test_id_en_ruta_con_payload_devuelve_404['; DROP TABLE users_user;--]
+     OK   TestSqlInjection::test_id_en_ruta_con_payload_devuelve_404[" OR ""="]
+     OK   TestSqlInjection::test_id_en_ruta_con_payload_devuelve_404[1; SELECT pg_sleep(5)--]
+     OK   TestSqlInjection::test_id_en_ruta_con_payload_devuelve_404[' UNION SELECT NULL,NULL,NULL--]
+     OK   TestSqlInjection::test_id_en_ruta_con_payload_devuelve_404[%27%20OR%201%3D1]
+     OK   TestSqlInjection::test_id_en_ruta_con_payload_devuelve_404[\\'; DELETE FROM equipment_equipment;--]
+     OK   TestSqlInjection::test_la_tabla_de_usuarios_sigue_intacta
+     OK   TestStoredXss::test_la_api_devuelve_json_y_no_html[<script>alert(1)</script>]
+     OK   TestStoredXss::test_la_api_devuelve_json_y_no_html[<img src=x onerror=alert(1)>]
+     OK   TestStoredXss::test_la_api_devuelve_json_y_no_html["><svg/onload=alert(1)>]
+     OK   TestStoredXss::test_la_api_devuelve_json_y_no_html[javascript:alert(1)]
+     OK   TestSecurityHeaders::test_cabeceras_de_seguridad
+     OK   TestSecurityHeaders::test_respuestas_de_api_no_se_cachean
+     OK   TestPasswordPolicy::test_contrasenas_debiles_rechazadas[12345678]
+     OK   TestPasswordPolicy::test_contrasenas_debiles_rechazadas[password]
+     OK   TestPasswordPolicy::test_contrasenas_debiles_rechazadas[abcdefgh]
+     OK   TestPasswordPolicy::test_contrasenas_debiles_rechazadas[admin1234]
+     OK   TestRoleEscalation::test_tecnico_no_puede_crear_usuarios
+     OK   TestRoleEscalation::test_admin_no_puede_crear_superadmin
+     OK   TestRoleEscalation::test_usuario_no_puede_auto_promoverse
+     OK   TestPaginationLimits::test_page_size_se_acota
+     OK   TestUsuarioNoRegistrado::test_usuario_inexistente_recibe_usuario_no_encontrado[token-obtain]
+     OK   TestUsuarioNoRegistrado::test_usuario_inexistente_recibe_usuario_no_encontrado[token-obtain-cookie]
+     OK   TestUsuarioNoRegistrado::test_payload_no_string_tambien_rechazado
+     OK   TestUsuarioNoRegistrado::test_usuario_registrado_con_clave_mala_no_es_usuario_no_encontrado
+     OK   TestUsuarioNoRegistrado::test_usuario_registrado_entra_siempre
+
+FIN DEL REPORTE

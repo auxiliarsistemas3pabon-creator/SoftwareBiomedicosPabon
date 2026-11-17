@@ -1,0 +1,87 @@
+# Plantilla nginx para producción del frontend (SPA) + proxy al backend.
+#
+# Objetivo: que el index SOLO se pueda abrir desde el dominio oficial.
+#   - Cualquier request con un Host distinto (IP directa, dominio ajeno
+#     apuntado a este servidor, DNS rebinding) cae en el default_server y
+#     nginx CIERRA la conexión sin responder (444).
+#   - El index nunca se puede cargar dentro de un <iframe> de otro sitio
+#     (X-Frame-Options + CSP frame-ancestors).
+#
+# Reemplaza biomedicos.clinicapabon.com por el dominio real y deja el mismo
+# valor en VITE_ALLOWED_HOSTS al hacer `npm run build`.
+
+# 1) Rechazo por defecto: hosts desconocidos -> conexión cerrada.
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    server_name _;
+    # Rechaza el handshake TLS si el SNI no es el nuestro (nginx >= 1.19.4),
+    # así ni siquiera se expone el certificado a hosts ajenos.
+    ssl_reject_handshake on;
+}
+
+# 2) HTTP del dominio oficial -> HTTPS.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name biomedicos.clinicapabon.com;
+    return 301 https://$host$request_uri;
+}
+
+# 3) Sitio oficial.
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name biomedicos.clinicapabon.com;
+
+    ssl_certificate     /etc/ssl/biomedicos/fullchain.pem;
+    ssl_certificate_key /etc/ssl/biomedicos/privkey.pem;
+
+    root /var/www/biomedicos/dist;
+    index index.html;
+
+    # Anti-iframe / clickjacking y endurecimiento general. "always" las
+    # aplica también a respuestas 4xx/5xx.
+    add_header X-Frame-Options "DENY" always;
+    add_header Content-Security-Policy "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Strict-Transport-Security "max-age=2592000; includeSubDomains" always;
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /ws/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # El index no se cachea: así un cambio de política llega de inmediato.
+    location = /index.html {
+        add_header Cache-Control "no-store" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Content-Security-Policy "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    # Fallback SPA.
+    location / {
+        try_files $uri /index.html;
+    }
+}
